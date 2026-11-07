@@ -62,7 +62,9 @@ export interface PersonDossier {
   id: string;
   name: string;
   codeName?: string;
-  photoUrl: string;
+  photoUrl: string; // legacy / external URL fallback
+  photoPath?: string; // path inside the private Supabase `photos` bucket
+  photoRev?: number; // bumps when the photo is replaced (forces reload)
   relationship: string;
   occupation: string;
   age: string | number;

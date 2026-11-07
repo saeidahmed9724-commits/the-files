@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { X, UserPlus, Image, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, Image, Sparkles, Loader2 } from 'lucide-react';
+import { uploadDossierPhoto } from '../lib/photos';
 import { PersonDossier } from '../types/dossier';
 
 interface NewFileModalProps {
@@ -24,19 +25,47 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
   const [knownSince, setKnownSince] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [initialNote, setInitialNote] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(photoFile);
+    setPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoFile]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isSaving) return;
 
     const id = `dos-${Date.now()}`;
+    let photoPath: string | undefined;
+    if (photoFile) {
+      setIsSaving(true);
+      setError('');
+      try {
+        photoPath = await uploadDossierPhoto(id, photoFile);
+      } catch (err: any) {
+        setError(err?.message || 'فشل رفع الصورة');
+        setIsSaving(false);
+        return;
+      }
+    }
     const codeNum = Math.floor(10 + Math.random() * 89);
     const newDossier: PersonDossier = {
       id,
       name: name.trim(),
       codeName: `ملف: ${name.trim().charAt(0)}-${codeNum}`,
+      photoPath,
+      photoRev: photoPath ? Date.now() : undefined,
       photoUrl: photoUrl.trim() || PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)],
       relationship: relationship.trim() || 'معرفة عامة',
       occupation: occupation.trim() || 'غير محدد',
@@ -80,6 +109,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
     };
 
     onAddDossier(newDossier);
+    setIsSaving(false);
     onClose();
   };
 
@@ -105,6 +135,11 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="text-xs text-rose-800 bg-rose-100 border border-rose-300 rounded px-3 py-2">
+              ⚠ {error}
+            </div>
+          )}
           <div>
             <label className="block text-xs font-bold text-[#5c4028] mb-1 font-typewriter uppercase">
               الاسم الكامل *
@@ -179,11 +214,38 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
               <span>رابط الصورة الشخصية (اختياري)</span>
               <span className="text-[10px] text-[#8a6843]">صورة بولارويد للأرشيف</span>
             </label>
+            <div className="flex items-center gap-3 mb-2">
+              <label className="px-3 py-1.5 bg-[#ecdcc4] hover:bg-[#dfcbb0] text-[#4a3422] text-xs font-bold rounded border border-[#a68660] cursor-pointer">
+                {photoFile ? 'تغيير الصورة' : 'اختيار صورة من الجهاز'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              {photoPreview && (
+                <img
+                  src={photoPreview}
+                  alt="معاينة"
+                  className="w-10 h-10 rounded object-cover grayscale border border-[#a68660]"
+                />
+              )}
+              {photoFile && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoFile(null)}
+                  className="text-[11px] text-[#8c1d18] underline"
+                >
+                  إزالة
+                </button>
+              )}
+            </div>
             <input
               type="url"
               value={photoUrl}
               onChange={(e) => setPhotoUrl(e.target.value)}
-              placeholder="https://example.com/photo.jpg"
+              placeholder="أو الصق رابط صورة: https://example.com/photo.jpg"
               className="w-full bg-[#f4ecd8] border-b-2 border-[#8c6b45] p-2 text-xs text-[#2a1a0e] focus:outline-none rounded mb-2"
             />
             {/* Quick avatar selection */}
@@ -230,10 +292,11 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-[#8c1d18] hover:bg-[#731713] text-[#fbf7ee] font-bold rounded shadow transition text-sm flex items-center gap-2"
+              disabled={isSaving}
+              className="px-5 py-2 bg-[#8c1d18] hover:bg-[#731713] disabled:opacity-60 text-[#fbf7ee] font-bold rounded shadow transition text-sm flex items-center gap-2"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>إيداع في الأرشيف</span>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+              <span>{isSaving ? 'جاري رفع الصورة...' : 'إيداع في الأرشيف'}</span>
             </button>
           </div>
         </form>

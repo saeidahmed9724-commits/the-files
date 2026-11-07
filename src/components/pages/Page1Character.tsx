@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { callAI } from '../../lib/ai';
+import { uploadDossierPhoto } from '../../lib/photos';
+import { DossierPhoto } from '../DossierPhoto';
 import { Star, Sparkles, Quote, Calendar, User, Briefcase, Heart, Clock, Loader2, Edit3, Check } from 'lucide-react';
 import { PersonDossier } from '../../types/dossier';
 import { getLatestObservation } from '../../utils/dossierLogic';
@@ -10,6 +13,9 @@ interface Page1CharacterProps {
 
 export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdateDossier }) => {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [name, setName] = useState(dossier.name);
   const [age, setAge] = useState(dossier.age.toString());
@@ -42,21 +48,32 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
 
   const handleGenerateSummary = async () => {
     setIsGeneratingSummary(true);
+    setAiError('');
     try {
-      const res = await fetch('/api/gemini/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dossier }),
-      });
-      const data = await res.json();
-      if (data.result) {
-        setSummaryText(data.result);
-        onUpdateDossier({ personalitySummary: data.result });
-      }
-    } catch (err) {
+      const result = await callAI('summary', { dossier });
+      setSummaryText(result);
+      onUpdateDossier({ personalitySummary: result });
+    } catch (err: any) {
       console.error('Error generating summary:', err);
+      setAiError(err?.message || 'حدث خطأ غير متوقع');
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+  const handlePhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploadingPhoto(true);
+    setPhotoError('');
+    try {
+      const path = await uploadDossierPhoto(dossier.id, file);
+      onUpdateDossier({ photoPath: path, photoRev: Date.now() });
+    } catch (err: any) {
+      setPhotoError(err?.message || 'فشل رفع الصورة');
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
@@ -215,6 +232,26 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
             </div>
           )}
 
+          {isEditingFields && (
+            <div className="flex flex-wrap items-center gap-2 form-line pb-1.5">
+              <span className="font-typewriter font-bold text-xs text-[#523924] uppercase min-w-[110px]">
+                رفع صورة:
+              </span>
+              <label className="px-2.5 py-1 bg-[#ecdcc4] hover:bg-[#dfcbb0] text-[#4a3422] text-xs font-bold rounded border border-[#a68660] cursor-pointer inline-flex items-center gap-1.5">
+                {isUploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                <span>{isUploadingPhoto ? 'جاري الرفع...' : 'اختيار صورة من الجهاز'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoPick}
+                  disabled={isUploadingPhoto}
+                  className="hidden"
+                />
+              </label>
+              {photoError && <span className="text-[11px] text-rose-800">⚠ {photoError}</span>}
+            </div>
+          )}
+
           {/* Code Name & Archive Reference */}
           <div className="flex items-center gap-4 pt-2 text-xs text-[#73583e] font-typewriter">
             <span>FILE REF: {dossier.codeName || 'CLASS-09'}</span>
@@ -232,11 +269,7 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
             {/* Polaroid Body */}
             <div className="polaroid-frame w-48 border border-[#ded5c3]">
               <div className="w-full h-44 bg-stone-800 overflow-hidden rounded-sm relative">
-                <img
-                  src={dossier.photoUrl}
-                  alt={dossier.name}
-                  className="w-full h-full object-cover grayscale contrast-115 sepia-[0.35]"
-                />
+                <DossierPhoto dossier={dossier} className="w-full h-full object-cover grayscale contrast-115 sepia-[0.35]" />
                 <div className="absolute inset-0 bg-amber-950/15 pointer-events-none" />
               </div>
               <div className="pt-2 text-center">
@@ -361,6 +394,11 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
                 )}
               </button>
             </div>
+            {aiError && (
+        <div className="mt-2 text-[11px] text-rose-800 bg-rose-100 border border-rose-300 rounded px-2 py-1.5 mb-2">
+          ⚠ {aiError}
+        </div>
+      )}
 
             {isEditingFields ? (
               <textarea

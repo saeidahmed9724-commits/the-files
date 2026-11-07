@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { callAI } from '../../lib/ai';
 import { Target, Sparkles, Loader2, CheckCircle2, HelpCircle, XCircle, Clock, Trash2, Edit3, Send } from 'lucide-react';
 import { PersonDossier, PredictionEntry, PredictionVerdict } from '../../types/dossier';
 import { calculatePredictionAccuracy } from '../../utils/dossierLogic';
@@ -12,6 +13,7 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
   const [predictions, setPredictions] = useState<PredictionEntry[]>(dossier.predictions || []);
   const [scenarioInput, setScenarioInput] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
+  const [aiError, setAiError] = useState('');
   const [editingActualId, setEditingActualId] = useState<string | null>(null);
   const [actualTextTemp, setActualTextTemp] = useState('');
 
@@ -22,14 +24,9 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
     if (!scenarioInput.trim()) return;
 
     setIsPredicting(true);
+    setAiError('');
     try {
-      const res = await fetch('/api/gemini/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dossier, scenario: scenarioInput.trim() }),
-      });
-      const data = await res.json();
-      const reaction = data.result || 'لم يتم استلام رد، يرجى المحاولة ثانية.';
+      const reaction = await callAI('predict', { dossier, scenario: scenarioInput.trim() });
 
       const newEntry: PredictionEntry = {
         id: `pred-${Date.now()}`,
@@ -43,8 +40,9 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
       setPredictions(updated);
       onUpdateDossier({ predictions: updated });
       setScenarioInput('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error predicting reaction:', err);
+      setAiError(err?.message || 'حدث خطأ غير متوقع');
     } finally {
       setIsPredicting(false);
     }
@@ -187,6 +185,11 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
             )}
           </button>
         </div>
+        {aiError && (
+        <div className="mt-2 text-[11px] text-rose-800 bg-rose-100 border border-rose-300 rounded px-2 py-1.5 ">
+          ⚠ {aiError}
+        </div>
+      )}
       </form>
 
       {/* Predictions Cards List */}

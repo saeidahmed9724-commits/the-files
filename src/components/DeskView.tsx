@@ -4,7 +4,8 @@ import {
   Plus,
   Download,
   Upload,
-  Lock,
+  LogOut,
+  DatabaseBackup,
   Folder,
   FolderOpen,
   Calendar,
@@ -18,6 +19,7 @@ import {
 import { PersonDossier } from '../types/dossier';
 import { searchDossiers } from '../utils/dossierLogic';
 import { NewFileModal } from './NewFileModal';
+import { DossierPhoto } from './DossierPhoto';
 
 interface DeskViewProps {
   dossiers: PersonDossier[];
@@ -25,8 +27,10 @@ interface DeskViewProps {
   onAddDossier: (dossier: PersonDossier) => void;
   onExportData: () => void;
   onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onLock: () => void;
-  onResetData: () => void;
+  onLogout: () => void;
+  onLoadSamples: () => void;
+  legacyCount: number;
+  onImportFromBrowser: () => void;
 }
 
 export const DeskView: React.FC<DeskViewProps> = ({
@@ -35,8 +39,10 @@ export const DeskView: React.FC<DeskViewProps> = ({
   onAddDossier,
   onExportData,
   onImportData,
-  onLock,
-  onResetData,
+  onLogout,
+  onLoadSamples,
+  legacyCount,
+  onImportFromBrowser,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
@@ -121,14 +127,26 @@ export const DeskView: React.FC<DeskViewProps> = ({
               />
             </label>
 
+            {legacyCount > 0 && (
+              <button
+                type="button"
+                onClick={onImportFromBrowser}
+                title="رفع الملفات المحفوظة قديماً في هذا المتصفح إلى حسابك"
+                className="px-3 py-2 bg-[#3a2a12] hover:bg-[#4a3718] text-[#f0d9a0] text-xs font-bold rounded-lg border border-[#a68253] transition flex items-center gap-1.5"
+              >
+                <DatabaseBackup className="w-3.5 h-3.5" />
+                <span>استيراد من هذا المتصفح ({legacyCount})</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={onLock}
-              title="قفل الأرشيف فوراً"
+              onClick={onLogout}
+              title="تسجيل الخروج"
               className="px-3 py-2 bg-[#19100a] hover:bg-[#261910] text-[#a89279] hover:text-[#e6d6c3] text-xs font-bold rounded-lg border border-[#4a3420] transition flex items-center gap-1.5"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span>قفل</span>
+              <LogOut className="w-3.5 h-3.5" />
+              <span>تسجيل الخروج</span>
             </button>
           </div>
         </div>
@@ -162,11 +180,11 @@ export const DeskView: React.FC<DeskViewProps> = ({
             <span>•</span>
             <button
               type="button"
-              onClick={onResetData}
+              onClick={onLoadSamples}
               className="underline hover:text-[#d9be8c] transition flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>إعادة النماذج الأصلية</span>
+              <span>تحميل ملفات نموذجية</span>
             </button>
           </div>
         </div>
@@ -178,10 +196,12 @@ export const DeskView: React.FC<DeskViewProps> = ({
           <div className="bg-[#1f1610]/80 border-2 border-dashed border-[#5c4028] rounded-xl p-12 text-center max-w-md mx-auto my-12">
             <Folder className="w-12 h-12 text-[#8c6b45] mx-auto mb-3 opacity-60" />
             <h3 className="text-base font-bold text-[#e6d6c3] mb-1">
-              لا توجد ملفات مطابقة
+              {dossiers.length === 0 ? 'الأرشيف فارغ' : 'لا توجد ملفات مطابقة'}
             </h3>
             <p className="text-xs text-[#a89279] mb-4">
-              لم نعثر على أي ملف يطابق بحثك "{searchQuery}". يمكنك إضافة ملف جديد أو مسح البحث.
+              {dossiers.length === 0
+                ? 'ابدأ بفتح ملف جديد، أو استورد بياناتك القديمة، أو حمّل ملفات نموذجية للتجربة.'
+                : `لم نعثر على أي ملف يطابق بحثك "${searchQuery}". يمكنك إضافة ملف جديد أو مسح البحث.`}
             </p>
             <button
               type="button"
@@ -259,11 +279,7 @@ export const DeskView: React.FC<DeskViewProps> = ({
                           {/* Polaroid thumbnail */}
                           <div className="polaroid-frame w-24 p-1.5 pb-4 border border-[#cfc0a3]">
                             <div className="w-full h-20 bg-stone-900 overflow-hidden rounded-xs">
-                              <img
-                                src={dossier.photoUrl}
-                                alt={dossier.name}
-                                className="w-full h-full object-cover grayscale contrast-110 sepia-[0.3]"
-                              />
+                              <DossierPhoto dossier={dossier} className="w-full h-full object-cover grayscale contrast-110 sepia-[0.3]" />
                             </div>
                             <p className="text-[9px] font-arabic-hand text-center text-[#3d2716] font-bold mt-1 truncate">
                               {dossier.name.split(' ')[0]}

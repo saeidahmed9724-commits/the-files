@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { callAI } from '../../lib/ai';
 import { History, Sparkles, Loader2, Edit3, Check, RefreshCw, FileText } from 'lucide-react';
 import { PersonDossier } from '../../types/dossier';
 
@@ -11,30 +12,26 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
   const [analysisText, setAnalysisText] = useState(dossier.changesOverTime?.analysisText || '');
   const [lastGenerated, setLastGenerated] = useState(dossier.changesOverTime?.lastGenerated || '');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setAiError('');
     try {
-      const res = await fetch('/api/gemini/changes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dossier }),
+      const result = await callAI('changes', { dossier });
+      const today = new Date().toISOString().split('T')[0];
+      setAnalysisText(result);
+      setLastGenerated(today);
+      onUpdateDossier({
+        changesOverTime: {
+          analysisText: result,
+          lastGenerated: today,
+        },
       });
-      const data = await res.json();
-      if (data.result) {
-        const today = new Date().toISOString().split('T')[0];
-        setAnalysisText(data.result);
-        setLastGenerated(today);
-        onUpdateDossier({
-          changesOverTime: {
-            analysisText: data.result,
-            lastGenerated: today,
-          },
-        });
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating changes:', err);
+      setAiError(err?.message || 'حدث خطأ غير متوقع');
     } finally {
       setIsGenerating(false);
     }
@@ -139,9 +136,19 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
               </>
             )}
           </button>
+          {aiError && (
+        <div className="mt-2 text-[11px] text-rose-800 bg-rose-100 border border-rose-300 rounded px-2 py-1.5 ">
+          ⚠ {aiError}
+        </div>
+      )}
         </div>
       ) : (
         <div className="bg-[#faf5eb] border-2 border-[#cbb184] rounded-lg p-6 shadow-inner relative">
+          {aiError && (
+            <div className="mb-3 text-[11px] text-rose-800 bg-rose-100 border border-rose-300 rounded px-2 py-1.5">
+              ⚠ {aiError}
+            </div>
+          )}
           {/* Metadata bar */}
           <div className="flex justify-between items-center pb-3 mb-4 border-b border-[#cca779] text-xs font-typewriter text-[#7a5f45]">
             <span className="stamp-black text-[11px]">تقرير تحليلي معتمد</span>
