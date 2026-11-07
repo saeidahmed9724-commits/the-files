@@ -4,7 +4,8 @@ import {
   Plus,
   Download,
   Upload,
-  LogOut,
+  KeyRound,
+  Lock,
   DatabaseBackup,
   Folder,
   FolderOpen,
@@ -20,6 +21,7 @@ import { PersonDossier } from '../types/dossier';
 import { searchDossiers } from '../utils/dossierLogic';
 import { NewFileModal } from './NewFileModal';
 import { DossierPhoto } from './DossierPhoto';
+import { ChangeCodeModal } from './ChangeCodeModal';
 
 interface DeskViewProps {
   dossiers: PersonDossier[];
@@ -27,7 +29,7 @@ interface DeskViewProps {
   onAddDossier: (dossier: PersonDossier) => void;
   onExportData: () => void;
   onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onLogout: () => void;
+  onLock: () => void;
   onLoadSamples: () => void;
   legacyCount: number;
   onImportFromBrowser: () => void;
@@ -39,13 +41,14 @@ export const DeskView: React.FC<DeskViewProps> = ({
   onAddDossier,
   onExportData,
   onImportData,
-  onLogout,
+  onLock,
   onLoadSamples,
   legacyCount,
   onImportFromBrowser,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showCodeModal, setShowCodeModal] = useState(false);
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null);
 
   const filteredDossiers = searchDossiers(dossiers, searchQuery);
@@ -141,12 +144,22 @@ export const DeskView: React.FC<DeskViewProps> = ({
 
             <button
               type="button"
-              onClick={onLogout}
-              title="تسجيل الخروج"
+              onClick={onLock}
+              title="قفل الأرشيف فوراً"
               className="px-3 py-2 bg-[#19100a] hover:bg-[#261910] text-[#a89279] hover:text-[#e6d6c3] text-xs font-bold rounded-lg border border-[#4a3420] transition flex items-center gap-1.5"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>تسجيل الخروج</span>
+              <Lock className="w-3.5 h-3.5" />
+              <span>قفل</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCodeModal(true)}
+              title="تغيير رمز المرور"
+              className="px-3 py-2 bg-[#19100a] hover:bg-[#261910] text-[#a89279] hover:text-[#e6d6c3] text-xs font-bold rounded-lg border border-[#4a3420] transition flex items-center gap-1.5"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">تغيير الرمز</span>
             </button>
           </div>
         </div>
@@ -189,6 +202,8 @@ export const DeskView: React.FC<DeskViewProps> = ({
           </div>
         </div>
       </header>
+
+      {showCodeModal && <ChangeCodeModal onClose={() => setShowCodeModal(false)} />}
 
       {/* Desk Surface: Scattered Manila Folders */}
       <main className="relative z-10 max-w-7xl mx-auto pb-16">

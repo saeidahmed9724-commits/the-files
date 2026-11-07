@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { PersonDossier } from './types/dossier';
 import { INITIAL_DOSSIERS } from './data/seedData';
-import { LoginScreen } from './components/LoginScreen';
+import { LockScreen } from './components/LockScreen';
 import { DeskView } from './components/DeskView';
 import { FolderView } from './components/FolderView';
 import { supabase } from './lib/supabase';
@@ -11,6 +11,7 @@ import { deleteDossierPhoto } from './lib/photos';
 
 const LEGACY_STORAGE_KEY = 'the_files_dossiers_v1';
 const SAVE_DEBOUNCE_MS = 800;
+const UNLOCK_FLAG = 'the_files_unlocked_session';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -37,6 +38,9 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState('');
   const [selectedDossierId, setSelectedDossierId] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState<boolean>(
+    () => sessionStorage.getItem(UNLOCK_FLAG) === 'true'
+  );
   const [legacyCount, setLegacyCount] = useState(() => readLegacyDossiers().length);
 
   // JSON of each dossier as last confirmed in the DB, used to find what changed.
@@ -52,7 +56,8 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const userId = session?.user.id;
+  // Data loads only after the passcode was entered in this browser session.
+  const userId = unlocked ? session?.user.id : undefined;
 
   // ---- Load from Supabase after login ----
   const loadDossiers = useCallback(async () => {
@@ -136,8 +141,12 @@ export default function App() {
   }, [flushSave]);
 
   // ---- Handlers ----
-  const handleLogout = async () => {
+  /** Lock = sign out + forget the unlock flag. The passcode is needed again. */
+  const handleLock = async () => {
     await flushSave();
+    sessionStorage.removeItem(UNLOCK_FLAG);
+    setUnlocked(false);
+    setSelectedDossierId(null);
     await supabase.auth.signOut();
   };
 
@@ -256,8 +265,15 @@ export default function App() {
   if (session === undefined) {
     return <Splash text="جاري التحقق من الجلسة..." />;
   }
-  if (!session) {
-    return <LoginScreen />;
+  if (!session || !unlocked) {
+    return (
+      <LockScreen
+        onUnlock={() => {
+          sessionStorage.setItem(UNLOCK_FLAG, 'true');
+          setUnlocked(true);
+        }}
+      />
+    );
   }
   if (loadState === 'loading' || loadState === 'idle') {
     return <Splash text="جاري فتح الأرشيف..." />;
@@ -267,7 +283,7 @@ export default function App() {
       <Splash
         text={`تعذّر تحميل الملفات: ${loadError}`}
         action={{ label: 'إعادة المحاولة', onClick: loadDossiers }}
-        secondary={{ label: 'تسجيل الخروج', onClick: handleLogout }}
+        secondary={{ label: 'تسجيل الخروج', onClick: handleLock }}
         isError
       />
     );
@@ -299,7 +315,7 @@ export default function App() {
         onAddDossier={handleAddDossier}
         onExportData={handleExportData}
         onImportData={handleImportData}
-        onLogout={handleLogout}
+        onLock={handleLock}
         onLoadSamples={handleLoadSamples}
         legacyCount={legacyCount}
         onImportFromBrowser={handleImportFromBrowser}

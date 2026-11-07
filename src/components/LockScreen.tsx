@@ -1,49 +1,59 @@
 import React, { useState } from 'react';
-import { Lock, KeyRound, ShieldAlert, FolderLock, Sparkles } from 'lucide-react';
+import { ShieldAlert, KeyRound, FolderLock, Loader2 } from 'lucide-react';
+import { supabase, supabaseConfigured } from '../lib/supabase';
+
+const OWNER_EMAIL = import.meta.env.VITE_OWNER_EMAIL as string | undefined;
+
+/** The Supabase password is derived from the passcode (min length 6 is required by Supabase). */
+export const passcodeToPassword = (code: string) => `files-${code}`;
 
 interface LockScreenProps {
   onUnlock: () => void;
-  correctPasscode: string;
-  onUpdatePasscode?: (newCode: string) => void;
 }
 
-export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, correctPasscode, onUpdatePasscode }) => {
+export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [passcode, setPasscode] = useState('');
-  const [error, setError] = useState(false);
-  const [showChangeModal, setShowChangeModal] = useState(false);
-  const [newCodeInput, setNewCodeInput] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleKeyPress = (num: string) => {
-    if (passcode.length < 6) {
-      const next = passcode + num;
-      setPasscode(next);
-      setError(false);
-      if (next === correctPasscode) {
-        setTimeout(() => {
-          onUnlock();
-        }, 150);
-      }
+    if (passcode.length < 6 && !loading) {
+      setPasscode(passcode + num);
+      setError('');
     }
   };
-
   const handleDelete = () => {
-    setPasscode((prev) => prev.slice(0, -1));
-    setError(false);
+    setPasscode((p) => p.slice(0, -1));
+    setError('');
   };
-
   const handleClear = () => {
     setPasscode('');
-    setError(false);
+    setError('');
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (passcode === correctPasscode) {
-      onUnlock();
-    } else {
-      setError(true);
-      setPasscode('');
+    if (passcode.length < 4 || loading) return;
+    if (!supabaseConfigured || !OWNER_EMAIL) {
+      setError('إعدادات Supabase ناقصة (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_OWNER_EMAIL)');
+      return;
     }
+    setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email: OWNER_EMAIL,
+      password: passcodeToPassword(passcode),
+    });
+    setLoading(false);
+    setPasscode('');
+    if (err) {
+      setError(
+        err.message.toLowerCase().includes('invalid')
+          ? 'الرمز غير صحيح، حاول مرة أخرى'
+          : `تعذّر الدخول: ${err.message}`
+      );
+      return;
+    }
+    onUnlock();
   };
 
   return (
@@ -83,7 +93,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, correctPasscod
 
           {/* Passcode Dots Display */}
           <div className="flex justify-center items-center gap-3 mb-6">
-            {[0, 1, 2, 3].map((idx) => (
+            {Array.from({ length: Math.max(4, passcode.length) }, (_, i) => i).map((idx) => (
               <div
                 key={idx}
                 className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
@@ -98,7 +108,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, correctPasscod
           {error && (
             <div className="flex items-center justify-center gap-2 text-rose-400 text-sm mb-4 animate-shake">
               <ShieldAlert className="w-4 h-4" />
-              <span>الرمز غير صحيح، حاول مرة أخرى</span>
+              <span>{error}</span>
             </div>
           )}
 
@@ -142,70 +152,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, correctPasscod
             onClick={() => handleSubmit()}
             className="w-full py-3 bg-[#8a6843] hover:bg-[#9c764e] text-[#1c140d] font-bold rounded-lg border border-[#cbb184] transition shadow-lg flex items-center justify-center gap-2 mb-3"
           >
-            <KeyRound className="w-4 h-4" />
-            <span>فتح الأرشيف</span>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            <span>{loading ? 'جاري الفتح...' : 'فتح الأرشيف'}</span>
           </button>
-
-          {/* Hint / Quick Unlock */}
-          <div className="flex items-center justify-between text-xs text-[#8c745c] mt-4 pt-3 border-t border-[#3d2c1e]">
-            <span className="font-typewriter">الرمز الافتراضي: 0000</span>
-            {onUpdatePasscode && (
-              <button
-                type="button"
-                onClick={() => setShowChangeModal(true)}
-                className="underline hover:text-[#d9be8c] transition"
-              >
-                تغيير الرمز
-              </button>
-            )}
-          </div>
         </div>
       </div>
-
-      {/* Change Passcode Modal */}
-      {showChangeModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#241a12] border border-[#8a6843] rounded-xl p-6 max-w-sm w-full text-right">
-            <h3 className="text-lg font-bold text-[#e6d3b3] mb-2 font-arabic-body">
-              تعيين رمز مرور سري جديد
-            </h3>
-            <p className="text-xs text-[#a89279] mb-4">
-              أدخل الرمز السري الجديد (٤ أرقام) لحماية ملفاتك الشخصية:
-            </p>
-            <input
-              type="password"
-              maxLength={4}
-              value={newCodeInput}
-              onChange={(e) => setNewCodeInput(e.target.value.replace(/\D/g, ''))}
-              placeholder="مثال: 1234"
-              className="w-full bg-[#18110b] border border-[#6b4f32] text-center text-xl font-typewriter text-[#e6d3b3] p-3 rounded-lg mb-4 focus:outline-none focus:border-[#d9be8c]"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (newCodeInput.length === 4 && onUpdatePasscode) {
-                    onUpdatePasscode(newCodeInput);
-                    setShowChangeModal(false);
-                    setNewCodeInput('');
-                  }
-                }}
-                disabled={newCodeInput.length !== 4}
-                className="flex-1 py-2 bg-[#8a6843] hover:bg-[#9c764e] disabled:opacity-50 text-[#1a120b] font-bold rounded-lg transition"
-              >
-                حفظ الرمز
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowChangeModal(false)}
-                className="px-4 py-2 bg-transparent text-[#a89279] hover:text-white border border-[#4a3623] rounded-lg transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
