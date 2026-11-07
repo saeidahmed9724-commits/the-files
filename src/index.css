@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --manila-base: #dfc89d;
+    --manila-dark: #cbb184;
+    --manila-border: #9b7e53;
+    --paper-bg: #f9f5ec;
+    --paper-border: #ded3bf;
+    --ink-black: #1d1712;
+    --ink-red: #8f211b;
+  }
+}
+
+.font-typewriter {
+  font-family: 'Special Elite', 'Courier Prime', monospace;
+}
+
+.font-arabic-hand {
+  font-family: 'Aref Ruqaa', 'Amiri', serif;
+}
+
+.font-arabic-body {
+  font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+}
+
+.font-serif-vintage {
+  font-family: 'Amiri', serif;
+}
+
+/* Vintage paper texture simulation */
+.bg-vintage-paper {
+  background-color: #faf5ea;
+  background-image: 
+    radial-gradient(#d3c2a0 0.75px, transparent 0.75px),
+    radial-gradient(#c2af8a 0.5px, #faf5ea 0.5px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+/* Vintage Desk Texture */
+.bg-desk-wood {
+  background-color: #24160c;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(20, 12, 6, 0.4) 0%, rgba(10, 6, 3, 0.95) 100%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 2px, transparent 2px, transparent 8px),
+    linear-gradient(to bottom, #301d0e, #1a0f07);
+}
+
+/* Rubber Stamp Styling */
+.stamp-red {
+  color: #8c1d18;
+  border: 2px solid #8c1d18;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Special Elite', 'Cairo', monospace;
+  font-weight: 700;
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 3px;
+  opacity: 0.88;
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 75%, rgba(0,0,0,0.6) 100%);
+  transform: rotate(-3deg);
+}
+
+.stamp-black {
+  color: #27221e;
+  border: 2px dashed #27221e;
+  font-family: 'Special Elite', 'Cairo', monospace;
+  font-weight: 700;
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  opacity: 0.82;
+  transform: rotate(2deg);
+}
+
+/* Polaroid Photo Frame */
+.polaroid-frame {
+  background: #fdfbf7;
+  padding: 10px 10px 28px 10px;
+  box-shadow: 2px 4px 15px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.18);
+  border-radius: 1px;
+}
+
+/* Paper clip simulation */
+.paperclip-clip {
+  position: absolute;
+  width: 14px;
+  height: 38px;
+  border: 3px solid #b5a078;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 1px 2px 3px rgba(0,0,0,0.3);
+  z-index: 20;
+}
+
+/* Manila Folder Shadows */
+.folder-shadow {
+  box-shadow: 
+    0 10px 25px -5px rgba(0, 0, 0, 0.4),
+    0 8px 10px -6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+/* Underline lined form */
+.form-line {
+  border-bottom: 1.5px dashed #a58e6c;
+}

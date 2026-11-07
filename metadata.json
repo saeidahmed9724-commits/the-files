@@ -1,0 +1,7 @@
+{
+  "name": "The Files - الملفات",
+  "description": "نظام الأرشيف والملفات الشخصية لدراسة وتحليل الشخصيات بأسلوب المحقق الكلاسيكي ودعم الذكاء الاصطناعي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
