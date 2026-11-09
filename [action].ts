@@ -3,35 +3,68 @@ import { GoogleGenAI } from '@google/genai';
 // Vercel serverless function.
 // Handles: POST /api/gemini/summary | /api/gemini/changes | /api/gemini/predict
 // Same URLs the front end already calls, so no client changes are needed.
-// Env vars (set in Vercel > Project > Settings > Environment Variables):
-//   GEMINI_API_KEY  (required)
-//   GEMINI_MODEL    (optional, defaults to gemini-3.8-flash)
+// Requires a logged-in Supabase user (Authorization: Bearer <access_token>).
+// Env vars (Vercel > Project > Settings > Environment Variables):
+//   GEMINI_API_KEY            (required)
+//   VITE_SUPABASE_URL         (already set; reused here to verify the token)
+//   VITE_SUPABASE_ANON_KEY    (already set)
+//   GEMINI_MODEL              (optional, tried first)
+//   ALLOWED_EMAIL             (optional, extra lock: only this email may call the AI)
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Tried in order; if one fails (unknown model / quota), the next is used.
+const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.5-flash-lite', 'gemini-3.8-flash'].filter(
+  (m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i
+);
 
-const SYSTEM_PROMPT = `أنت محلل نفسي وسلوكي خبير يساعد مستخدماً في تحليل وفهم الشخصيات المحيطة به ضمن ملف شخصي سري وأرشيف تحليلي ("The Files - الملفات").
-قواعد التحليل الهامة:
-1. تعامل مع جميع المدخلات كملاحظات وتجارب شخصية من وجهة نظر المستخدم وليست حقائق علمية أو قطعية.
-2. أشر دوماً إلى درجات الاحتمال وعدم اليقين (مثل: "يبدو أن...", "الملاحظات ترجح...", "استناداً إلى الوقائع المسجلة...").
-3. ابنِ كل استنتاج أو توقع على الأدلة المسجلة في السجل الزمني ونقاط الحساسية والراحة.
-4. استخدم لغة عربية رصينة، تحليلية، تشبه تقارير المحققين والمحللين النفسيين بلمسة كلاسيكية أنيقة.`;
+async function getUser(token: string): Promise<{ email?: string } | null> {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anon) return null;
+  try {
+    const r = await fetch(`${url}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anon },
+    });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+const SYSTEM_PROMPT = `إنت صاحب مقرّب وفاهم في طبائع الناس، بتساعد المستخدم يفهم الناس اللي حواليه من ملفه السري ("The Files - الملفات").
+اتكلم بالعامية المصرية الطبيعية، زي ما بتكلم صاحبك في الشات. ممنوع الفصحى والكلام الرسمي وأسلوب التقارير.
+
+القواعد:
+1. اللي في الملف ده ملاحظات المستخدم هو، مش حقايق. متألفش تفاصيل مش موجودة، ولو الداتا قليلة قول كده بصراحة.
+2. اعتمد على اللي مسجل بس (المواقف، اللي بيضايقه، اللي بيريحه)، وقول "غالبًا" أو "على الأرجح" بدل ما تجزم.
+3. واضح ومفيد ومش مطوّل. جمل قصيرة، من غير مقدمات ولا ختام ولا تكرار ولا نصايح عامة، بس ماتختصرش لدرجة إن الكلام يبقى ناقص أو مش مفهوم.
+6. لو في "أنماط اتأكدت" (توقعات سابقة طلعت صح)، اعتبرها أقوى دليل عندك وابني عليها.
+4. متستخدمش عناوين ولا رموز تنسيق زي # أو ** أو ---. اكتب سطور عادية، وممكن ترقيم بسيط (1، 2، 3) لو محتاج.
+5. متعملش تحليل نفسي عميق ولا تشخيصات. قول إيه المتوقع يحصل وليه وتعمل إيه، وبس.`;
+
+function confirmedBlock(d: any): string {
+  const items = (d.predictions || [])
+    .filter((p: any) => p.verdict === 'correct')
+    .slice(0, 8)
+    .map((p: any) => `- لما: ${p.scenario} → اللي حصل: ${p.actualOutcome || 'زي ما اتوقع'}${p.learnedInsight ? ` | النمط: ${p.learnedInsight}` : ''}`);
+  return items.length ? `\nأنماط اتأكدت (توقعات سابقة طلعت صح):\n${items.join('\n')}\n` : '';
+}
 
 function buildSummaryPrompt(d: any): string {
-  return `إليك ملف الشخصية التالي:
+  return `ده ملف شخص:
 - الاسم: ${d.name}
-- صلة القرابة/العلاقة: ${d.relationship || 'غير محدد'}
-- المهنة: ${d.occupation || 'غير محدد'}
+- العلاقة: ${d.relationship || 'غير محدد'}
+- الشغل: ${d.occupation || 'غير محدد'}
 - العمر: ${d.age || 'غير محدد'}
-- الاستقرار الانفعالي المقدر: ${d.emotionalStability || 3} من 5
-- أسلوب التفكير: ${d.mind?.howTheyThink || 'غير محدد'}
-- اتخاذ القرار: ${d.mind?.decisionMaking || 'غير محدد'}
-- التعامل تحت الضغط: ${d.mind?.handlingPressure || 'غير محدد'}
-- ما يزعجه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'لا يوجد'}
-- ما يريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'لا يوجد'}
-- الملاحظات المسجلة: ${d.timeline?.slice(-5).map((n: any) => `[${n.date} - ${n.type}]: ${n.text}`).join('\n') || 'لا توجد ملاحظات كافية'}
-
+- الاتزان النفسي (تقدير المستخدم): ${d.emotionalStability || 3} من 5
+- طريقة تفكيره: ${d.mind?.howTheyThink || 'غير محدد'}
+- بياخد قراراته إزاي: ${d.mind?.decisionMaking || 'غير محدد'}
+- تحت الضغط: ${d.mind?.handlingPressure || 'غير محدد'}
+- اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'لا يوجد'}
+- اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'لا يوجد'}
+- آخر الملاحظات: ${d.timeline?.slice(-8).map((n: any) => `[${n.date} - ${n.type}]: ${n.text}`).join('\n') || 'لا توجد ملاحظات كافية'}
+${confirmedBlock(d)}
 المطلوب:
-اكتب خلاصة شخصية مركزة (في حدود فقرة أو فقرتين، 60-90 كلمة) بأسلوب أرشيفي تحليلي مكثف يصف جوهر شخصيته، نمط دوافعه، وأفضل مفتاح للتفاهم معه.`;
+لخّص شخصيته في 3 لـ 4 جمل (حوالي 80 كلمة): هو إيه نوعه، إيه اللي بيحركه، إيه اللي بيضايقه وبيريحه، وأحسن طريقة تتعامل بيها معاه.`;
 }
 
 function buildChangesPrompt(d: any): string {
@@ -39,46 +72,136 @@ function buildChangesPrompt(d: any): string {
     .map((n: any, i: number) => `${i + 1}. [${n.date}] (${n.type} | مصدر: ${n.source}): ${n.text}`)
     .join('\n');
 
-  return `إليك السجل الزمني للملاحظات المسجلة عن (${d.name}):
+  return `دي ملاحظات المستخدم عن (${d.name}) مرتبة بالتاريخ:
 ${notes || 'لا توجد ملاحظات مسجلة كافية'}
 
-صلة القرابة: ${d.relationship}
-المهنة: ${d.occupation}
-
+العلاقة: ${d.relationship}
+الشغل: ${d.occupation}
+${confirmedBlock(d)}
 المطلوب:
-قارن بين الملاحظات القديمة والملاحظات الأحدث، وقدم تقريراً تحليلياً بعنوان "مسار التحول والتغير عبر الزمن" يشمل:
-1. التحولات الملموسة في السلوك أو المزاج أو التواصل (مع الإشارة إلى التواريخ).
-2. أنماط سلوكية جديدة ظهرت مؤخراً.
-3. الثوابت التي لم تتغير في شخصيته.
-4. قراءة استشرافية: إلى أين يتجه هذا التغير وكيفية التعامل معه الآن.
-(صغ الإجابة بنقاط واضحة وتنسيق أنيق ولغة تحليلية رصينة).`;
+قارن القديم بالجديد وقول إيه اللي اتغير فيه. اكتب 4 لـ 6 سطور قصيرة (حوالي 150 كلمة):
+- إيه اللي اتغير (اذكر التاريخ لو واضح)
+- إيه اللي ثابت ما اتغيرش
+- إيه المتوقع بعد كده وتتعامل معاه إزاي
+لو الملاحظات قليلة أو كلها في نفس الفترة، قول إن لسه مفيش تغيير يتقاس، ومتألفش.`;
 }
 
 function buildPredictPrompt(d: any, scenario: string): string {
-  return `ملف الشخصية قيد الدراسة:
+  return `ملف الشخص:
 - الاسم: ${d.name} (${d.relationship})
-- أسلوب التفكير: ${d.mind?.howTheyThink || 'غير مسجل'}
-- اتخاذ القرار: ${d.mind?.decisionMaking || 'غير مسجل'}
-- التعامل مع الضغط: ${d.mind?.handlingPressure || 'غير مسجل'}
-- ما يزعجه ومثيرات التوتر: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
-- ما يريحه ومفاتيح الهدوء: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
-- عينة من السجل السلوكي: ${d.timeline?.slice(-6).map((n: any) => `[${n.date}]: ${n.text}`).join(' | ') || 'لا توجد'}
-
-الموقف أو الرسالة المزمع طرحها:
+- طريقة تفكيره: ${d.mind?.howTheyThink || 'غير مسجل'}
+- بياخد قراراته إزاي: ${d.mind?.decisionMaking || 'غير مسجل'}
+- تحت الضغط: ${d.mind?.handlingPressure || 'غير مسجل'}
+- اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
+- اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
+- مواقف سابقة: ${d.timeline?.slice(-10).map((n: any) => `[${n.date}]: ${n.text}`).join(' | ') || 'لا توجد'}
+${confirmedBlock(d)}
+الموقف أو الرسالة اللي المستخدم ناوي يقولها:
 "${scenario}"
 
 المطلوب:
-بناءً على الأرشيف السلوكي المتاح، قدم توقّعاً استشرافياً لرد فعله يشمل:
-1. **رد الفعل الأولي المتوقع (الاستجابة الفورية)**: المشاعر، نبرة الصوت أو لغة الجسد المحتملة.
-2. **رد الفعل العميق (بعد التفكير)**: كيف سيفسر الموقف وما الخطوة التي من المرجح أن يتخذها.
-3. **نقاط الخطر التي يجب تجنبها**: ما الذي قد يشعل حساسيته في هذا الموقف تحديداً.
-4. **الصياغة أو التوقيت الأمثل**: نصيحة تكتيكية لتقليل المقاومة وضمان أفضل استجابة ممكنة.
-(اكتب التوقع بأسلوب احتمالي يراعي هامش عدم اليقين).`;
+توقع رد فعله في 5 سطور (حوالي 150 كلمة)، كل سطر جملتين تلاتة بالكتير، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+رد فعله الأول: ...
+هيفكر ويعمل إيه بعدين: ...
+ليه كده: ... (اربطه بموقف أو نمط مسجل)
+خلي بالك من: ...
+أحسن طريقة تقولها: ...
+وبنّي كلامك على المواقف المسجلة بس، ولو مفيش داتا كفاية قول ده بصراحة.`;
+}
+
+function buildLearnPrompt(d: any, scenario: string, predicted: string, actual: string): string {
+  return `المستخدم توقع رد فعل (${d.name}) في موقف، والتوقع طلع صح.
+الموقف: "${scenario}"
+التوقع: "${predicted}"
+اللي حصل فعلًا: "${actual || 'زي ما اتوقع بالظبط'}"
+
+المطلوب:
+استخرج جملة واحدة بس (أقصى حد 25 كلمة) بالعامية المصرية، تلخّص النمط اللي اتأكد عن شخصيته أو رد فعله، بصيغة عامة تنفع تتستخدم في مواقف تانية. ابدأ بـ "غالبًا" أو "ملاحظ إنه". من غير تحليل نفسي ومن غير تفاصيل مش موجودة فوق. اكتب الجملة بس.`;
+}
+
+const SIM_SYSTEM = `إنت بتمثّل دور شخص حقيقي في محادثة تدريب، بناءً على ملاحظات المستخدم عنه بس (دي ملاحظات مش حقايق).
+اتكلم بصيغة المتكلم وبالعامية المصرية زي ما الشخص ده بيتكلم في الشات، ورد قصير: جملة لتلات جمل.
+التزم بطريقة تفكيره وأسلوب كلامه ومحفزاته ودفاعاته المسجلة. لو كلام المستخدم لمس حاجة بتضايقه، وضّح رد فعله بشكل واقعي (دفاع، تهرب، سكوت، هجوم خفيف...) حسب اللي مسجل.
+متألفش معلومات عنه مش موجودة في الملف، ولو اتسألت عن حاجة مش معروفة رد بشكل طبيعي من غير ما تخترع تفاصيل.
+متخرجش من الدور ومتشرح حاجة ومتكتبش اسمك قبل الكلام. اكتب الرد بس. من غير رموز تنسيق.
+متكتبش شتايم جارحة أو تهديدات حتى لو الشخص عصبي، اعبّر عن العصبية بطريقة معتدلة.`;
+
+function profileBlock(d: any): string {
+  return `ملف الشخص:
+- الاسم: ${d.name} (${d.relationship || 'غير محدد'})
+- الشغل: ${d.occupation || 'غير محدد'}
+- طريقة تفكيره: ${d.mind?.howTheyThink || 'غير مسجل'}
+- بياخد قراراته إزاي: ${d.mind?.decisionMaking || 'غير مسجل'}
+- تحت الضغط: ${d.mind?.handlingPressure || 'غير مسجل'}
+- قيمه: ${d.mind?.coreValues || 'غير مسجل'}
+- أسلوب كلامه: ${d.mind?.communicationStyle || 'غير مسجل'}
+- اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
+- اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
+- مواقف سابقة: ${d.timeline?.slice(-10).map((n: any) => `[${n.date}]: ${n.text}`).join(' | ') || 'لا توجد'}
+${confirmedBlock(d)}`;
+}
+
+function cleanHistory(history: any): { role: 'me' | 'them'; text: string }[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((m: any) => m && (m.role === 'me' || m.role === 'them') && typeof m.text === 'string' && m.text.trim())
+    .slice(-20)
+    .map((m: any) => ({ role: m.role, text: m.text.trim().slice(0, 1000) }));
+}
+
+function transcript(d: any, h: { role: string; text: string }[]): string {
+  return h.map((m) => `${m.role === 'me' ? 'أنا' : d.name}: ${m.text}`).join('\n');
+}
+
+function buildApproachPrompt(d: any, topic: string, plan: string): string {
+  return `${profileBlock(d)}
+المستخدم عايز يفتح مع ${d.name} الموضوع ده: "${topic}"
+${plan ? `وناوي يقولها كده: "${plan}"` : 'ولسه مش حاسم هيقولها إزاي.'}
+
+المطلوب (حوالي 160 كلمة)، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+رد فعله المتوقع: ...
+ليه: ... (اربطه بمحفز أو أسلوب تفكير أو موقف مسجل)
+هيضايقه إيه بالذات: ...
+أحسن مدخل للكلام: ...
+جملة افتتاحية مقترحة: ...
+${plan ? 'ولو طريقته المقترحة فيها مشكلة قولها بصراحة في سطر "هيضايقه إيه بالذات".' : ''}
+بنّي كلامك على المسجل بس، ولو الداتا مش كفاية قول كده بصراحة.`;
+}
+
+function buildSimulatePrompt(d: any, h: { role: string; text: string }[]): string {
+  return `${profileBlock(d)}
+المحادثة لحد دلوقتي:
+${transcript(d, h)}
+
+اكتب رد ${d.name} الجاي بس.`;
+}
+
+function buildDebriefPrompt(d: any, h: { role: string; text: string }[]): string {
+  return `${profileBlock(d)}
+دي محادثة تدريب (تمثيل) بين المستخدم و${d.name}:
+${transcript(d, h)}
+
+المطلوب (حوالي 130 كلمة)، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+المحادثة مشيت إزاي: ...
+أكتر لحظة حساسة: ...
+كان الأفضل تقول: ...
+الخطوة الجاية: ...
+فكّرهم إن ده تمثيل مبني على ملاحظاتهم، والشخص الحقيقي ممكن يرد غير كده.`;
 }
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const authHeader = String(req.headers?.authorization || '');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) return res.status(401).json({ error: 'يجب تسجيل الدخول لاستخدام الذكاء الاصطناعي' });
+  const user = await getUser(token);
+  if (!user) return res.status(401).json({ error: 'جلسة الدخول غير صالحة، سجّل الدخول من جديد' });
+  const allowed = process.env.ALLOWED_EMAIL;
+  if (allowed && user.email?.toLowerCase() !== allowed.toLowerCase()) {
+    return res.status(403).json({ error: 'غير مصرّح لهذا الحساب' });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -88,7 +211,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const action = String(req.query?.action || '');
-  const { dossier, scenario } = req.body || {};
+  const { dossier, scenario, predictedReaction, actualOutcome, history, topic, plan } = req.body || {};
 
   if (!dossier) {
     return res.status(400).json({ error: 'بيانات الملف غير متوفرة' });
@@ -104,20 +227,41 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'الموقف غير متوفر' });
     }
     prompt = buildPredictPrompt(dossier, scenario);
+  } else if (action === 'learn') {
+    if (!scenario || !predictedReaction) {
+      return res.status(400).json({ error: 'بيانات التوقع غير كاملة' });
+    }
+    prompt = buildLearnPrompt(dossier, scenario, predictedReaction, actualOutcome || '');
+  } else if (action === 'approach') {
+    if (!topic || typeof topic !== 'string') {
+      return res.status(400).json({ error: 'اكتب الموضوع اللي عايز تفتحه' });
+    }
+    prompt = buildApproachPrompt(dossier, topic.slice(0, 1000), typeof plan === 'string' ? plan.slice(0, 1000) : '');
+  } else if (action === 'simulate' || action === 'debrief') {
+    const h = cleanHistory(history);
+    if (h.length === 0 || (action === 'simulate' && h[h.length - 1].role !== 'me')) {
+      return res.status(400).json({ error: 'اكتب رسالتك الأول' });
+    }
+    prompt = action === 'simulate' ? buildSimulatePrompt(dossier, h) : buildDebriefPrompt(dossier, h);
   } else {
     return res.status(404).json({ error: 'Unknown action' });
   }
 
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: prompt,
-      config: { systemInstruction: SYSTEM_PROMPT },
-    });
-    return res.status(200).json({ result: response.text });
-  } catch (error: any) {
-    console.error(`Gemini error (${action}):`, error);
-    return res.status(500).json({ error: error?.message || 'حدث خطأ أثناء المعالجة' });
+  const ai = new GoogleGenAI({ apiKey });
+  let lastError: any = null;
+  for (const model of MODELS) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : SYSTEM_PROMPT },
+      });
+      if (response.text) return res.status(200).json({ result: response.text, model });
+      lastError = new Error('رد فارغ من النموذج');
+    } catch (error: any) {
+      console.error(`Gemini error (${action}, ${model}):`, error);
+      lastError = error;
+    }
   }
+  return res.status(500).json({ error: lastError?.message || 'حدث خطأ أثناء المعالجة' });
 }
