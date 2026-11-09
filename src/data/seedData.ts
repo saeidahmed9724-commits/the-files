@@ -45,6 +45,7 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
     timeline: [
       {
         id: 'note-1',
+        energy: 'positive',
         date: '2025-02-14',
         type: 'incident',
         source: 'seen',
@@ -53,6 +54,7 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
       },
       {
         id: 'note-2',
+        energy: 'positive',
         date: '2025-07-20',
         type: 'conversation',
         source: 'seen',
@@ -61,6 +63,7 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
       },
       {
         id: 'note-3',
+        energy: 'negative',
         date: '2025-11-05',
         type: 'incident',
         source: 'inferred',
@@ -69,6 +72,7 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
       },
       {
         id: 'note-4',
+        energy: 'positive',
         date: '2026-03-02',
         type: 'impression',
         source: 'seen',
@@ -77,12 +81,18 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
       },
       {
         id: 'note-5',
+        energy: 'positive',
         date: '2026-09-11',
         type: 'incident',
         source: 'seen',
         text: 'قدم لي نصيحة ثمينة حول التفاوض على العقد الأخير، واقترح صياغة بنود بديلة أنقذتني من التزام مالي غير محسوب.',
         tags: ['ولاء', 'نصيحة'],
       },
+    ],
+    lexicon: [
+      { id: 'lex-1', phrase: 'خلينا نكون عمليين', kind: 'stress_word', meaning: 'بيحاول يقفل نقاش بدأ يضايقه' },
+      { id: 'lex-2', phrase: 'بصراحة', kind: 'tell', meaning: 'غالبًا هيقول رأي مش مرتاح يقوله' },
+      { id: 'lex-3', phrase: 'بيقلل كلامه ويبص في الموبايل', kind: 'body_language', meaning: 'وصل لحد الضغط' },
     ],
     changesOverTime: {
       analysisText: `تقرير الأرشيف السلوكي:

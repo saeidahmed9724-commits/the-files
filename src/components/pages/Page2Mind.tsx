@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Brain, Shield, Award, MessageSquare, Zap, Activity, Check, HelpCircle } from 'lucide-react';
 import { PersonDossier, ConfidenceLevel, MindThinking } from '../../types/dossier';
+import { LexiconSection } from '../LexiconSection';
 
 interface Page2MindProps {
   dossier: PersonDossier;
@@ -191,6 +192,8 @@ export const Page2Mind: React.FC<Page2MindProps> = ({ dossier, onUpdateDossier }
           );
         })}
       </div>
+
+      <LexiconSection dossier={dossier} onUpdateDossier={onUpdateDossier} />
     </div>
   );
 };

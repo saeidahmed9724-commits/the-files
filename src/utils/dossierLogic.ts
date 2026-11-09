@@ -1,4 +1,4 @@
-import { PersonDossier, PredictionEntry, TimelineEntry } from '../types/dossier';
+import { EnergyImpact, LexiconKind, PersonDossier, PredictionEntry, TimelineEntry } from '../types/dossier';
 
 export interface PredictionStats {
   total: number;
@@ -45,6 +45,155 @@ export function calculatePredictionAccuracy(predictions: PredictionEntry[] = [])
     incorrect,
     pending,
     accuracyRate,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Social Battery & ROI
+// ---------------------------------------------------------------------------
+
+export const ENERGY_VALUE: Record<EnergyImpact, number> = {
+  positive: 1,
+  negative: -1,
+  draining: -2, // draining costs twice as much as a plain bad moment
+};
+
+export const ENERGY_LABEL: Record<EnergyImpact, string> = {
+  positive: 'إيجابي (بيشحنك)',
+  negative: 'سلبي',
+  draining: 'مستنزف',
+};
+
+export const LEXICON_KIND_LABEL: Record<LexiconKind, string> = {
+  stress_word: 'كلمة بيكررها لما يتوتر',
+  tic: 'لزمة في الكلام',
+  body_language: 'لغة جسد',
+  tell: 'علامة كدب / حماس',
+};
+
+/** An observation counts half as much every HALF_LIFE_DAYS days: the meter drifts on its own. */
+export const BATTERY_HALF_LIFE_DAYS = 45;
+export const BATTERY_MIN_RATED = 3;
+/**
+ * A small "neutral" weight in the denominator: with little or only old evidence the
+ * meter relaxes back toward 50% instead of freezing on stale opinions.
+ */
+export const BATTERY_NEUTRAL_WEIGHT = 0.5;
+export const BATTERY_STALE_DAYS = 60;
+const DAY_MS = 86_400_000;
+
+export type BatteryLevel = 'unknown' | 'charging' | 'balanced' | 'costly' | 'draining';
+export type BatteryTrend = 'improving' | 'worsening' | 'stable' | 'unknown';
+
+export interface SocialBattery {
+  ratedCount: number;
+  unratedCount: number;
+  positive: number;
+  negative: number;
+  draining: number;
+  /** 0 (fully draining) .. 100 (fully charging), 50 = neutral. Recent events weigh more. */
+  percent: number;
+  level: BatteryLevel;
+  trend: BatteryTrend;
+  /** Days since the newest rated observation (null when none). */
+  daysSinceLast: number | null;
+  /** true when there are fewer than BATTERY_MIN_RATED rated observations. */
+  lowData: boolean;
+  /** true when the newest rated observation is older than BATTERY_STALE_DAYS. */
+  stale: boolean;
+}
+
+function parseDay(date: string): number {
+  const t = new Date(date).getTime();
+  return Number.isNaN(t) ? NaN : t;
+}
+
+/** Evidence-weighted energy score with the neutral prior (used for the headline number). */
+function shrunkScore(items: { value: number; weight: number }[]): number | null {
+  if (items.length === 0) return null;
+  const sum = items.reduce((a, b) => a + b.value * b.weight, 0);
+  const total = items.reduce((a, b) => a + b.weight, 0);
+  return sum / (total + BATTERY_NEUTRAL_WEIGHT);
+}
+
+function weightedAverage(items: { value: number; weight: number }[]): number | null {
+  const total = items.reduce((a, b) => a + b.weight, 0);
+  if (items.length === 0 || total <= 0) return null;
+  return items.reduce((a, b) => a + b.value * b.weight, 0) / total;
+}
+
+/** Maps a score in [-2, 1] onto 0..100 with neutral at 50. */
+function scoreToPercent(score: number): number {
+  const pct = score >= 0 ? 50 + 50 * score : 50 + (50 * score) / 2;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
+export function batteryLevelFor(percent: number, lowData: boolean): BatteryLevel {
+  if (lowData) return 'unknown';
+  if (percent >= 65) return 'charging';
+  if (percent >= 40) return 'balanced';
+  if (percent >= 20) return 'costly';
+  return 'draining';
+}
+
+/**
+ * Time-weighted energy balance of a relationship, from the rated timeline entries.
+ * `now` is injectable so the "moves over time" behaviour is testable.
+ */
+export function calculateSocialBattery(timeline: TimelineEntry[] = [], now: Date = new Date()): SocialBattery {
+  const nowMs = now.getTime();
+  const rated = timeline.filter((e) => e.energy && ENERGY_VALUE[e.energy] !== undefined);
+  const unratedCount = timeline.length - rated.length;
+
+  let positive = 0;
+  let negative = 0;
+  let draining = 0;
+  const points: { value: number; weight: number; ageDays: number }[] = [];
+
+  for (const e of rated) {
+    const energy = e.energy as EnergyImpact;
+    if (energy === 'positive') positive++;
+    else if (energy === 'negative') negative++;
+    else draining++;
+
+    const t = parseDay(e.date);
+    // Unparseable date: treat as "now" rather than silently dropping the observation.
+    const ageDays = Number.isNaN(t) ? 0 : Math.max(0, (nowMs - t) / DAY_MS);
+    points.push({
+      value: ENERGY_VALUE[energy],
+      weight: Math.pow(0.5, ageDays / BATTERY_HALF_LIFE_DAYS),
+      ageDays,
+    });
+  }
+
+  const lowData = rated.length < BATTERY_MIN_RATED;
+  const daysSinceLast = points.length ? Math.round(Math.min(...points.map((p) => p.ageDays))) : null;
+  const score = shrunkScore(points);
+  const percent = score === null ? 50 : scoreToPercent(score);
+
+  // Trend: last 30 days vs the 60 days before that.
+  const recent = weightedAverage(points.filter((p) => p.ageDays <= 30));
+  const earlier = weightedAverage(points.filter((p) => p.ageDays > 30 && p.ageDays <= 90));
+  const recentN = points.filter((p) => p.ageDays <= 30).length;
+  const earlierN = points.filter((p) => p.ageDays > 30 && p.ageDays <= 90).length;
+  let trend: BatteryTrend = 'unknown';
+  if (recent !== null && earlier !== null && recentN >= 2 && earlierN >= 2) {
+    const diff = recent - earlier;
+    trend = diff > 0.25 ? 'improving' : diff < -0.25 ? 'worsening' : 'stable';
+  }
+
+  return {
+    ratedCount: rated.length,
+    unratedCount,
+    positive,
+    negative,
+    draining,
+    percent,
+    level: batteryLevelFor(percent, lowData),
+    trend,
+    daysSinceLast,
+    lowData,
+    stale: daysSinceLast !== null && daysSinceLast > BATTERY_STALE_DAYS,
   };
 }
 
@@ -148,16 +297,47 @@ export function formatDossierForAI(dossier: PersonDossier): string {
     dossier.timeline.forEach((note, i) => {
       const typeLabel = note.type === 'incident' ? 'واقعة/حدث' : note.type === 'conversation' ? 'محادثة' : 'انطباع';
       const sourceLabel = note.source === 'seen' ? 'عاينته بنفسي' : 'استنتجته';
-      lines.push(`[${note.date}] (${typeLabel} | مصدر: ${sourceLabel}): ${note.text}`);
+      const energyLabel = note.energy ? ` | أثره على طاقتي: ${ENERGY_LABEL[note.energy]}` : '';
+      lines.push(`[${note.date}] (${typeLabel} | مصدر: ${sourceLabel}${energyLabel}): ${note.text}`);
     });
   } else {
     lines.push(`(لا توجد ملاحظات مسجلة)`);
   }
   lines.push(``);
 
+  const battery = calculateSocialBattery(dossier.timeline);
+  if (!battery.lowData) {
+    const levelText: Record<BatteryLevel, string> = {
+      unknown: 'غير كافٍ',
+      charging: 'بيشحنني',
+      balanced: 'متوازنة',
+      costly: 'بتسحب من طاقتي',
+      draining: 'مرهقة ومستنزفة',
+    };
+    lines.push(`--- ميزان الطاقة في العلاقة (Social Battery) ---`);
+    lines.push(
+      `الحالة: ${levelText[battery.level]} (${battery.percent}/100) | مواقف إيجابية: ${battery.positive} | سلبية: ${battery.negative} | مستنزفة: ${battery.draining} (المواقف الأحدث وزنها أكبر)`
+    );
+    lines.push(``);
+  }
+
+  if (dossier.lexicon && dossier.lexicon.length > 0) {
+    lines.push(`--- قاموس الشخص: كلماته ولزماته ولغة جسده ---`);
+    dossier.lexicon.forEach((l, i) => {
+      lines.push(`${i + 1}. [${LEXICON_KIND_LABEL[l.kind]}] "${l.phrase}"${l.meaning ? ` ← غالبًا بتدل على: ${l.meaning}` : ''}`);
+    });
+    lines.push(``);
+  }
+
   if (dossier.changesOverTime?.analysisText) {
     lines.push(`--- مسار التغير عبر الزمن المسجل ---`);
     lines.push(dossier.changesOverTime.analysisText);
+    lines.push(``);
+  }
+
+  if (dossier.changesOverTime?.changeLog && dossier.changesOverTime.changeLog.length > 0) {
+    lines.push(`--- تغيرات في شخصيته سجلتها بنفسي ---`);
+    dossier.changesOverTime.changeLog.forEach((c) => lines.push(`[${c.date}] ${c.text}`));
     lines.push(``);
   }
 

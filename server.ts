@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import geminiHandler from './api/gemini/[action]';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -198,6 +199,13 @@ app.post('/api/gemini/predict', async (req, res) => {
     console.error('Error predicting reaction:', error);
     res.status(500).json({ error: error?.message || 'حدث خطأ أثناء توليد التوقع' });
   }
+});
+
+// Every other AI action (learn, approach, simulate, debrief, extract) uses the same
+// handler as production (Vercel), so dev and prod behave identically.
+app.post('/api/gemini/:action', (req, res) => {
+  (req as any).query = { ...req.query, action: req.params.action };
+  return geminiHandler(req, res);
 });
 
 // Dev server / Static setup

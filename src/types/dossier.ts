@@ -3,6 +3,11 @@ export type ConfidenceLevel = 'low' | 'medium' | 'high';
 export type ObservationType = 'incident' | 'conversation' | 'impression';
 export type ObservationSource = 'seen' | 'inferred';
 
+// How a recorded situation affected the user's energy. Feeds the Social Battery meter.
+export type EnergyImpact = 'positive' | 'negative' | 'draining';
+
+export type LexiconKind = 'stress_word' | 'tic' | 'body_language' | 'tell';
+
 export type PredictionVerdict = 'correct' | 'partially_correct' | 'incorrect' | 'pending';
 
 export interface MindThinking {
@@ -41,11 +46,28 @@ export interface TimelineEntry {
   type: ObservationType;
   source: ObservationSource;
   tags?: string[];
+  energy?: EnergyImpact; // unset = not rated yet (ignored by the battery)
+  fromVoice?: boolean; // created through Quick Capture (voice or text)
+}
+
+/** One entry of the person's "dictionary": a word, habit or body-language tell. */
+export interface LexiconItem {
+  id: string;
+  phrase: string; // the word / habit / gesture itself
+  kind: LexiconKind;
+  meaning?: string; // what it usually signals, in the user's own words
+}
+
+export interface ChangeNote {
+  id: string;
+  date: string;
+  text: string;
 }
 
 export interface ChangesReport {
   analysisText: string;
   lastGenerated?: string;
+  changeLog?: ChangeNote[]; // personality changes the user logged directly (e.g. via Quick Capture)
 }
 
 export interface PredictionEntry {
@@ -81,6 +103,7 @@ export interface PersonDossier {
   triggers: TriggerItem[];
   comforts: ComfortItem[];
   timeline: TimelineEntry[];
+  lexicon?: LexiconItem[];
   changesOverTime: ChangesReport;
   predictions: PredictionEntry[];
 }

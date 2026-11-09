@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Calendar, Plus, MessageSquare, Eye, Lightbulb, Trash2, Edit2, Filter, Check, Tag } from 'lucide-react';
-import { PersonDossier, TimelineEntry, ObservationType, ObservationSource } from '../../types/dossier';
+import { PersonDossier, TimelineEntry, ObservationType, ObservationSource, EnergyImpact } from '../../types/dossier';
+import { EnergyPicker, ENERGY_UI } from '../EnergyPicker';
+import { QuickCapture } from '../QuickCapture';
+import { applyCapture, CaptureSelection } from '../../utils/captureApply';
 
 interface Page4TimelineProps {
   dossier: PersonDossier;
@@ -17,10 +20,12 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
   const [noteType, setNoteType] = useState<ObservationType>('incident');
   const [noteSource, setNoteSource] = useState<ObservationSource>('seen');
   const [noteTagInput, setNoteTagInput] = useState('');
+  const [noteEnergy, setNoteEnergy] = useState<EnergyImpact | undefined>(undefined);
 
   // Filters
   const [filterType, setFilterType] = useState<string>('all');
   const [filterSource, setFilterSource] = useState<string>('all');
+  const [filterEnergy, setFilterEnergy] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const typeConfig: Record<ObservationType, { label: string; icon: any; color: string }> = {
@@ -50,6 +55,7 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
       type: noteType,
       source: noteSource,
       tags: tags.length > 0 ? tags : undefined,
+      energy: noteEnergy,
     };
 
     const updated = [newEntry, ...timeline];
@@ -58,7 +64,21 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
 
     setNoteText('');
     setNoteTagInput('');
+    setNoteEnergy(undefined);
     setIsAdding(false);
+  };
+
+  const handleRate = (id: string, energy: EnergyImpact | undefined) => {
+    const updated = timeline.map((n) => (n.id === id ? { ...n, energy } : n));
+    setTimeline(updated);
+    onUpdateDossier({ timeline: updated });
+  };
+
+  const handleCapture = (selection: CaptureSelection, date: string) => {
+    const { patch, counts } = applyCapture({ ...dossier, timeline }, selection, date);
+    if (patch.timeline) setTimeline(patch.timeline);
+    onUpdateDossier(patch);
+    return counts;
   };
 
   const handleDelete = (id: string) => {
@@ -72,6 +92,8 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
     .filter((entry) => {
       if (filterType !== 'all' && entry.type !== filterType) return false;
       if (filterSource !== 'all' && entry.source !== filterSource) return false;
+      if (filterEnergy === 'unrated' && entry.energy) return false;
+      if (filterEnergy !== 'all' && filterEnergy !== 'unrated' && entry.energy !== filterEnergy) return false;
       if (searchQuery.trim() && !entry.text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       return true;
     })
@@ -104,6 +126,8 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
           <span>إضافة ملاحظة جديدة</span>
         </button>
       </div>
+
+      <QuickCapture dossier={dossier} onApply={handleCapture} />
 
       {/* Add Note Card Form */}
       {isAdding && (
@@ -176,6 +200,13 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
 
           <div className="mb-3">
             <label className="block text-[11px] font-bold text-[#5c4028] mb-1 font-typewriter">
+              أثر الموقف على طاقتك (اختياري، بيغذي مؤشر الطاقة):
+            </label>
+            <EnergyPicker value={noteEnergy} onChange={setNoteEnergy} />
+          </div>
+
+          <div className="mb-3">
+            <label className="block text-[11px] font-bold text-[#5c4028] mb-1 font-typewriter">
               وسوم تصنيفية (اختياري - مفصولة بفواصل):
             </label>
             <input
@@ -229,6 +260,18 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
             <option value="all">كل المصادر</option>
             <option value="seen">معاينة شخصية</option>
             <option value="inferred">استنتاج تحليلي</option>
+          </select>
+
+          <select
+            value={filterEnergy}
+            onChange={(e) => setFilterEnergy(e.target.value)}
+            className="bg-[#faf5eb] border border-[#a68660] px-2 py-1 rounded text-xs"
+          >
+            <option value="all">كل مستويات الطاقة</option>
+            <option value="positive">إيجابي</option>
+            <option value="negative">سلبي</option>
+            <option value="draining">مستنزف</option>
+            <option value="unrated">لسه متصنفش</option>
           </select>
         </div>
 
@@ -293,6 +336,17 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
                 <p className="text-xs sm:text-sm font-arabic-body text-[#24170e] leading-relaxed">
                   {item.text}
                 </p>
+
+                {/* Energy rating (click to re-rate or clear) */}
+                <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                  <span className="text-[10px] font-typewriter text-[#7a5f45]">
+                    {item.energy ? ENERGY_UI[item.energy].label : 'أثره على طاقتك؟'}
+                  </span>
+                  <EnergyPicker compact value={item.energy} onChange={(v) => handleRate(item.id, v)} />
+                  {item.fromVoice && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-[#cca779] bg-[#f0e4cd] text-[#5c4028]">إدخال سريع</span>
+                  )}
+                </div>
 
                 {/* Tags */}
                 {item.tags && item.tags.length > 0 && (

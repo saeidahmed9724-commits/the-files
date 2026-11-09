@@ -5,13 +5,15 @@ import { DossierPhoto } from '../DossierPhoto';
 import { Star, Sparkles, Quote, Calendar, User, Briefcase, Heart, Clock, Loader2, Edit3, Check } from 'lucide-react';
 import { PersonDossier } from '../../types/dossier';
 import { getLatestObservation } from '../../utils/dossierLogic';
+import { SocialBatteryMeter } from '../SocialBatteryMeter';
 
 interface Page1CharacterProps {
   dossier: PersonDossier;
   onUpdateDossier: (updated: Partial<PersonDossier>) => void;
+  onGoToPage?: (page: number) => void;
 }
 
-export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdateDossier }) => {
+export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdateDossier, onGoToPage }) => {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [aiError, setAiError] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -323,6 +325,8 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
           </div>
         )}
       </div>
+
+      <SocialBatteryMeter dossier={dossier} onGoToTimeline={onGoToPage ? () => onGoToPage(4) : undefined} />
 
       {/* Bottom Row: 2 Boxes (Emotional Stability & Summary) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">

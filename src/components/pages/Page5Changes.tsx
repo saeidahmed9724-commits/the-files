@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { callAI } from '../../lib/ai';
-import { History, Sparkles, Loader2, Edit3, Check, RefreshCw, FileText } from 'lucide-react';
+import { History, Sparkles, Loader2, Edit3, Check, Plus, Trash2 } from 'lucide-react';
 import { PersonDossier } from '../../types/dossier';
 
 interface Page5ChangesProps {
@@ -14,6 +14,8 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiError, setAiError] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [newChange, setNewChange] = useState('');
+  const changeLog = dossier.changesOverTime?.changeLog || [];
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -25,6 +27,7 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
       setLastGenerated(today);
       onUpdateDossier({
         changesOverTime: {
+          ...dossier.changesOverTime,
           analysisText: result,
           lastGenerated: today,
         },
@@ -40,11 +43,27 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
   const handleSaveText = () => {
     onUpdateDossier({
       changesOverTime: {
+        ...dossier.changesOverTime,
         analysisText,
         lastGenerated: lastGenerated || new Date().toISOString().split('T')[0],
       },
     });
     setIsEditing(false);
+  };
+
+  const saveChangeLog = (next: typeof changeLog) =>
+    onUpdateDossier({
+      changesOverTime: { ...dossier.changesOverTime, analysisText: dossier.changesOverTime?.analysisText || '', changeLog: next },
+    });
+
+  const handleAddChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChange.trim()) return;
+    saveChangeLog([
+      { id: `chg-${Date.now()}`, date: new Date().toISOString().split('T')[0], text: newChange.trim() },
+      ...changeLog,
+    ]);
+    setNewChange('');
   };
 
   return (
@@ -174,6 +193,52 @@ export const Page5Changes: React.FC<Page5ChangesProps> = ({ dossier, onUpdateDos
           </div>
         </div>
       )}
+
+      {/* Changes the user logged directly (manually or through Quick Capture) */}
+      <div className="mt-6 bg-[#f5ecda] border-2 border-[#cbb184] rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#cca779]">
+          <span className="font-bold text-sm text-[#4a3422]">تغيرات لاحظتها بنفسك</span>
+          <span className="font-typewriter text-[10px] text-[#7a5f45]">MY CHANGE LOG</span>
+        </div>
+
+        <form onSubmit={handleAddChange} className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={newChange}
+            onChange={(e) => setNewChange(e.target.value)}
+            placeholder="مثال: بقى بيرد بسرعة بعد ما كان بيتأخر بالأيام"
+            className="flex-1 bg-white border border-[#a68660] p-2 text-xs rounded focus:outline-none"
+          />
+          <button type="submit" disabled={!newChange.trim()} className="px-3 py-1.5 bg-[#8c1d18] hover:bg-[#731713] disabled:opacity-40 text-white text-xs font-bold rounded flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> إضافة
+          </button>
+        </form>
+
+        {changeLog.length === 0 ? (
+          <p className="text-xs text-[#8c745c] text-center py-3">
+            لسه مفيش تغيرات مسجلة. الفويس السريع في صفحة السجل بيضيف هنا تلقائيًا لما تحكي إنه اتغير.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {changeLog.map((c) => (
+              <li key={c.id} className="bg-[#faf5ec] border border-[#d6be90] rounded p-2.5 flex items-start justify-between gap-2">
+                <div>
+                  <span className="font-typewriter text-[11px] font-bold text-[#8c1d18]">[ {c.date} ]</span>
+                  <p className="text-xs text-[#24170e] leading-relaxed mt-0.5">{c.text}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => saveChangeLog(changeLog.filter((x) => x.id !== c.id))}
+                  className="text-stone-400 hover:text-rose-600 p-1 shrink-0"
+                  aria-label="حذف"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 };

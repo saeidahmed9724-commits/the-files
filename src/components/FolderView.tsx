@@ -196,7 +196,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
             }`}
           >
             {activePage === 1 && (
-              <Page1Character dossier={dossier} onUpdateDossier={onUpdateDossier} />
+              <Page1Character dossier={dossier} onUpdateDossier={onUpdateDossier} onGoToPage={goToPage} />
             )}
             {activePage === 2 && (
               <Page2Mind dossier={dossier} onUpdateDossier={onUpdateDossier} />
@@ -283,6 +283,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
         onSaveChanges={(analysis) =>
           onUpdateDossier({
             changesOverTime: {
+              ...dossier.changesOverTime,
               analysisText: analysis,
               lastGenerated: new Date().toISOString().split('T')[0],
             },
