@@ -119,6 +119,76 @@ function buildLearnPrompt(d: any, scenario: string, predicted: string, actual: s
 استخرج جملة واحدة بس (أقصى حد 25 كلمة) بالعامية المصرية، تلخّص النمط اللي اتأكد عن شخصيته أو رد فعله، بصيغة عامة تنفع تتستخدم في مواقف تانية. ابدأ بـ "غالبًا" أو "ملاحظ إنه". من غير تحليل نفسي ومن غير تفاصيل مش موجودة فوق. اكتب الجملة بس.`;
 }
 
+const SIM_SYSTEM = `إنت بتمثّل دور شخص حقيقي في محادثة تدريب، بناءً على ملاحظات المستخدم عنه بس (دي ملاحظات مش حقايق).
+اتكلم بصيغة المتكلم وبالعامية المصرية زي ما الشخص ده بيتكلم في الشات، ورد قصير: جملة لتلات جمل.
+التزم بطريقة تفكيره وأسلوب كلامه ومحفزاته ودفاعاته المسجلة. لو كلام المستخدم لمس حاجة بتضايقه، وضّح رد فعله بشكل واقعي (دفاع، تهرب، سكوت، هجوم خفيف...) حسب اللي مسجل.
+متألفش معلومات عنه مش موجودة في الملف، ولو اتسألت عن حاجة مش معروفة رد بشكل طبيعي من غير ما تخترع تفاصيل.
+متخرجش من الدور ومتشرح حاجة ومتكتبش اسمك قبل الكلام. اكتب الرد بس. من غير رموز تنسيق.
+متكتبش شتايم جارحة أو تهديدات حتى لو الشخص عصبي، اعبّر عن العصبية بطريقة معتدلة.`;
+
+function profileBlock(d: any): string {
+  return `ملف الشخص:
+- الاسم: ${d.name} (${d.relationship || 'غير محدد'})
+- الشغل: ${d.occupation || 'غير محدد'}
+- طريقة تفكيره: ${d.mind?.howTheyThink || 'غير مسجل'}
+- بياخد قراراته إزاي: ${d.mind?.decisionMaking || 'غير مسجل'}
+- تحت الضغط: ${d.mind?.handlingPressure || 'غير مسجل'}
+- قيمه: ${d.mind?.coreValues || 'غير مسجل'}
+- أسلوب كلامه: ${d.mind?.communicationStyle || 'غير مسجل'}
+- اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
+- اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
+- مواقف سابقة: ${d.timeline?.slice(-10).map((n: any) => `[${n.date}]: ${n.text}`).join(' | ') || 'لا توجد'}
+${confirmedBlock(d)}`;
+}
+
+function cleanHistory(history: any): { role: 'me' | 'them'; text: string }[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((m: any) => m && (m.role === 'me' || m.role === 'them') && typeof m.text === 'string' && m.text.trim())
+    .slice(-20)
+    .map((m: any) => ({ role: m.role, text: m.text.trim().slice(0, 1000) }));
+}
+
+function transcript(d: any, h: { role: string; text: string }[]): string {
+  return h.map((m) => `${m.role === 'me' ? 'أنا' : d.name}: ${m.text}`).join('\n');
+}
+
+function buildApproachPrompt(d: any, topic: string, plan: string): string {
+  return `${profileBlock(d)}
+المستخدم عايز يفتح مع ${d.name} الموضوع ده: "${topic}"
+${plan ? `وناوي يقولها كده: "${plan}"` : 'ولسه مش حاسم هيقولها إزاي.'}
+
+المطلوب (حوالي 160 كلمة)، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+رد فعله المتوقع: ...
+ليه: ... (اربطه بمحفز أو أسلوب تفكير أو موقف مسجل)
+هيضايقه إيه بالذات: ...
+أحسن مدخل للكلام: ...
+جملة افتتاحية مقترحة: ...
+${plan ? 'ولو طريقته المقترحة فيها مشكلة قولها بصراحة في سطر "هيضايقه إيه بالذات".' : ''}
+بنّي كلامك على المسجل بس، ولو الداتا مش كفاية قول كده بصراحة.`;
+}
+
+function buildSimulatePrompt(d: any, h: { role: string; text: string }[]): string {
+  return `${profileBlock(d)}
+المحادثة لحد دلوقتي:
+${transcript(d, h)}
+
+اكتب رد ${d.name} الجاي بس.`;
+}
+
+function buildDebriefPrompt(d: any, h: { role: string; text: string }[]): string {
+  return `${profileBlock(d)}
+دي محادثة تدريب (تمثيل) بين المستخدم و${d.name}:
+${transcript(d, h)}
+
+المطلوب (حوالي 130 كلمة)، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+المحادثة مشيت إزاي: ...
+أكتر لحظة حساسة: ...
+كان الأفضل تقول: ...
+الخطوة الجاية: ...
+فكّرهم إن ده تمثيل مبني على ملاحظاتهم، والشخص الحقيقي ممكن يرد غير كده.`;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -141,7 +211,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const action = String(req.query?.action || '');
-  const { dossier, scenario, predictedReaction, actualOutcome } = req.body || {};
+  const { dossier, scenario, predictedReaction, actualOutcome, history, topic, plan } = req.body || {};
 
   if (!dossier) {
     return res.status(400).json({ error: 'بيانات الملف غير متوفرة' });
@@ -162,6 +232,17 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'بيانات التوقع غير كاملة' });
     }
     prompt = buildLearnPrompt(dossier, scenario, predictedReaction, actualOutcome || '');
+  } else if (action === 'approach') {
+    if (!topic || typeof topic !== 'string') {
+      return res.status(400).json({ error: 'اكتب الموضوع اللي عايز تفتحه' });
+    }
+    prompt = buildApproachPrompt(dossier, topic.slice(0, 1000), typeof plan === 'string' ? plan.slice(0, 1000) : '');
+  } else if (action === 'simulate' || action === 'debrief') {
+    const h = cleanHistory(history);
+    if (h.length === 0 || (action === 'simulate' && h[h.length - 1].role !== 'me')) {
+      return res.status(400).json({ error: 'اكتب رسالتك الأول' });
+    }
+    prompt = action === 'simulate' ? buildSimulatePrompt(dossier, h) : buildDebriefPrompt(dossier, h);
   } else {
     return res.status(404).json({ error: 'Unknown action' });
   }
@@ -173,7 +254,7 @@ export default async function handler(req: any, res: any) {
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
-        config: { systemInstruction: SYSTEM_PROMPT },
+        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : SYSTEM_PROMPT },
       });
       if (response.text) return res.status(200).json({ result: response.text, model });
       lastError = new Error('رد فارغ من النموذج');
