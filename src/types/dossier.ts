@@ -56,6 +56,8 @@ export interface PredictionEntry {
   actualOutcome?: string;
   verdict: PredictionVerdict;
   evaluatedAt?: string;
+  learnedInsight?: string; // pattern the AI extracted when the prediction was marked correct
+  learnedNoteId?: string; // id of the auto-added timeline entry
 }
 
 export interface PersonDossier {
