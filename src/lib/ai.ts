@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type AIAction = 'summary' | 'changes' | 'predict';
+export type AIAction = 'summary' | 'changes' | 'predict' | 'learn';
 
 /**
  * Calls the serverless Gemini function with the logged-in user's token.
