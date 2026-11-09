@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { callAI } from '../../lib/ai';
-import { Target, Sparkles, Loader2, CheckCircle2, HelpCircle, XCircle, Clock, Trash2, Edit3, Send } from 'lucide-react';
-import { PersonDossier, PredictionEntry, PredictionVerdict } from '../../types/dossier';
+import { Target, Sparkles, Loader2, CheckCircle2, HelpCircle, XCircle, Clock, Trash2, Edit3, ChevronDown, ChevronUp, Lightbulb, Lock } from 'lucide-react';
+import { PersonDossier, PredictionEntry, PredictionVerdict, TimelineEntry } from '../../types/dossier';
 import { calculatePredictionAccuracy } from '../../utils/dossierLogic';
 
 interface Page6PredictionsProps {
@@ -17,7 +17,80 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
   const [editingActualId, setEditingActualId] = useState<string | null>(null);
   const [actualTextTemp, setActualTextTemp] = useState('');
 
+  const [openIds, setOpenIds] = useState<string[]>([]); // closed (correct) cards the user re-opened
+  const [learningId, setLearningId] = useState<string | null>(null);
+  const [learnError, setLearnError] = useState('');
+
+  // Always-latest copies, because the learn call finishes asynchronously.
+  const predsRef = useRef(predictions);
+  predsRef.current = predictions;
+  const dossierRef = useRef(dossier);
+  dossierRef.current = dossier;
+
   const stats = calculatePredictionAccuracy(predictions);
+
+  const today = () => new Date().toISOString().split('T')[0];
+
+  const toggleOpen = (id: string) =>
+    setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  // Remove the auto-added timeline note (if any) and clear the learned insight.
+  const withoutLearning = (list: PredictionEntry[], id: string) => {
+    const target = list.find((p) => p.id === id);
+    const timeline: TimelineEntry[] = (dossierRef.current.timeline || []).filter(
+      (n) => n.id !== target?.learnedNoteId
+    );
+    const preds = list.map((p) =>
+      p.id === id ? { ...p, learnedInsight: undefined, learnedNoteId: undefined } : p
+    );
+    return { preds, timeline };
+  };
+
+  // A correct prediction teaches the file: extract a pattern and add it as an inferred note.
+  const learnFromPrediction = async (id: string) => {
+    const entry = predsRef.current.find((p) => p.id === id);
+    if (!entry || entry.verdict !== 'correct' || entry.learnedNoteId) return;
+    setLearningId(id);
+    setLearnError('');
+    try {
+      const insight = (
+        await callAI('learn', {
+          dossier: dossierRef.current,
+          scenario: entry.scenario,
+          predictedReaction: entry.predictedReaction,
+          actualOutcome: entry.actualOutcome || '',
+        })
+      ).trim();
+
+      // The user may have changed the verdict while we were waiting.
+      const latest = predsRef.current.find((p) => p.id === id);
+      if (!latest || latest.verdict !== 'correct') return;
+
+      const note: TimelineEntry = {
+        id: `note-learn-${Date.now()}`,
+        date: today(),
+        text: `(استنتاج من توقع صح) ${insight}`,
+        type: 'impression',
+        source: 'inferred',
+        tags: ['من-توقع-صح'],
+      };
+      const preds = predsRef.current.map((p) =>
+        p.id === id ? { ...p, learnedInsight: insight, learnedNoteId: note.id } : p
+      );
+      setPredictions(preds);
+      onUpdateDossier({ predictions: preds, timeline: [note, ...(dossierRef.current.timeline || [])] });
+    } catch (err: any) {
+      setLearnError(err?.message || 'تعذّر استخراج الاستنتاج');
+    } finally {
+      setLearningId(null);
+    }
+  };
+
+  const handleRemoveLearning = (id: string) => {
+    const { preds, timeline } = withoutLearning(predsRef.current, id);
+    setPredictions(preds);
+    onUpdateDossier({ predictions: preds, timeline });
+  };
 
   const handlePredict = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,18 +122,29 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
   };
 
   const handleSetVerdict = (id: string, verdict: PredictionVerdict) => {
-    const updated = predictions.map((p) => {
-      if (p.id === id) {
-        return {
-          ...p,
-          verdict,
-          evaluatedAt: new Date().toISOString().split('T')[0],
-        };
+    let list = predictions.map((p) =>
+      p.id === id ? { ...p, verdict, evaluatedAt: today() } : p
+    );
+    let timeline: TimelineEntry[] | undefined;
+
+    // Leaving "correct" undoes what the file learned from it.
+    if (verdict !== 'correct') {
+      const had = predictions.find((p) => p.id === id)?.learnedNoteId;
+      if (had) {
+        const r = withoutLearning(list, id);
+        list = r.preds;
+        timeline = r.timeline;
       }
-      return p;
-    });
-    setPredictions(updated);
-    onUpdateDossier({ predictions: updated });
+    }
+
+    setPredictions(list);
+    onUpdateDossier(timeline ? { predictions: list, timeline } : { predictions: list });
+
+    if (verdict === 'correct') {
+      setOpenIds((prev) => prev.filter((x) => x !== id)); // close the card
+      predsRef.current = list;
+      void learnFromPrediction(id);
+    }
   };
 
   const handleSaveActualOutcome = (id: string) => {
@@ -76,9 +160,17 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
   };
 
   const handleDeletePrediction = (id: string) => {
+    const target = predictions.find((p) => p.id === id);
     const updated = predictions.filter((p) => p.id !== id);
     setPredictions(updated);
-    onUpdateDossier({ predictions: updated });
+    if (target?.learnedNoteId) {
+      onUpdateDossier({
+        predictions: updated,
+        timeline: (dossier.timeline || []).filter((n) => n.id !== target.learnedNoteId),
+      });
+    } else {
+      onUpdateDossier({ predictions: updated });
+    }
   };
 
   return (
@@ -192,6 +284,12 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
       )}
       </form>
 
+      {learnError && (
+        <div className="mb-4 text-[11px] text-rose-800 bg-rose-100 border border-rose-300 rounded px-2 py-1.5">
+          ⚠ {learnError}
+        </div>
+      )}
+
       {/* Predictions Cards List */}
       <div className="space-y-6">
         {predictions.length === 0 ? (
@@ -199,13 +297,18 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
             لا توجد توقعات مسجلة بعد. اطرح أول موقف في الصندوق أعلاه لتجربة التوقع.
           </div>
         ) : (
-          predictions.map((p, idx) => (
+          predictions.map((p, idx) => {
+            const closed = p.verdict === 'correct' && !openIds.includes(p.id);
+            return (
             <div
               key={p.id}
               className="bg-[#fcf9f2] border-2 border-[#cbb184] rounded-lg p-5 shadow-sm hover:shadow-md transition relative"
             >
               {/* Card Header */}
-              <div className="flex flex-wrap justify-between items-center gap-2 mb-3 pb-2 border-b border-[#cca779]">
+              <div
+                className={`flex flex-wrap justify-between items-center gap-2 pb-2 border-b border-[#cca779] ${closed ? 'mb-2' : 'mb-3'} ${p.verdict === 'correct' ? 'cursor-pointer' : ''}`}
+                onClick={p.verdict === 'correct' ? () => toggleOpen(p.id) : undefined}
+              >
                 <div className="flex items-center gap-2">
                   <span className="font-typewriter text-xs font-bold text-[#8c1d18] bg-[#f2e7d0] px-2 py-0.5 rounded border border-[#cca779]">
                     توقع #{predictions.length - idx} [ {p.date} ]
@@ -237,9 +340,18 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
                       : 'قيد المتابعة ⏳'}
                   </span>
 
+                  {p.verdict === 'correct' && (
+                    <span className="text-stone-500 p-1" aria-hidden>
+                      {closed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </span>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => handleDeletePrediction(p.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeletePrediction(p.id);
+                    }}
                     className="text-stone-400 hover:text-rose-600 transition p-1"
                     title="حذف التوقع"
                     aria-label="حذف"
@@ -249,6 +361,39 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
                 </div>
               </div>
 
+              {/* Learned insight (always visible, even when the card is closed) */}
+              {(p.learnedInsight || learningId === p.id) && (
+                <div className="mb-3 p-2.5 bg-[#eef3e2] border border-emerald-300 rounded text-xs font-arabic-body text-[#2c3d1a] flex items-start gap-2">
+                  <Lightbulb className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-800" />
+                  <div className="flex-1">
+                    {learningId === p.id ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin" /> بيتعلّم من التوقع ده...
+                      </span>
+                    ) : (
+                      <>
+                        <span className="font-bold">اتضاف للملف تلقائي: </span>
+                        {p.learnedInsight}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLearning(p.id)}
+                          className="mr-2 text-[11px] text-rose-800 hover:underline"
+                        >
+                          (شيله)
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              {closed && (
+                <div className="text-[11px] text-[#7a5f45] flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> التوقع اتقفل لأنه طلع صح. دوس على الكارت عشان تفتحه.
+                </div>
+              )}
+
+              {!closed && (
+              <>
               {/* Predicted Reaction Box */}
               <div className="mb-4 p-3.5 bg-[#f4ebd6] border-r-4 border-[#8c1d18] rounded text-xs sm:text-sm font-arabic-body text-[#2c1d11] leading-relaxed whitespace-pre-wrap">
                 <span className="block font-bold text-[#691410] mb-1 font-typewriter text-[11px]">
@@ -363,8 +508,11 @@ export const Page6Predictions: React.FC<Page6PredictionsProps> = ({ dossier, onU
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
