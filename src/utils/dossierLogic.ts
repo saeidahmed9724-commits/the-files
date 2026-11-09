@@ -165,7 +165,8 @@ export function formatDossierForAI(dossier: PersonDossier): string {
     const stats = calculatePredictionAccuracy(dossier.predictions);
     lines.push(`--- سجل التوقعات السابق (نسبة الدقة الحالية: ${stats.accuracyRate}%) ---`);
     dossier.predictions.forEach((p, i) => {
-      lines.push(`توقع ${i + 1} [${p.date}]: السيناريو: "${p.scenario}" -> النتيجة الفعلية: "${p.actualOutcome || 'قيد المتابعة'}" [الحكم: ${p.verdict}]`);
+      const verdictLabel = p.verdict === 'correct' ? 'صائب' : p.verdict === 'partially_correct' ? 'صائب جزئياً' : p.verdict === 'incorrect' ? 'خاطئ' : 'قيد المتابعة';
+      lines.push(`توقع ${i + 1} [${p.date}]: السيناريو: "${p.scenario}" -> النتيجة الفعلية: "${p.actualOutcome || 'قيد المتابعة'}" [الحكم: ${verdictLabel}]${p.learnedInsight ? ` | نمط مؤكد: ${p.learnedInsight}` : ''}`);
     });
   }
 
