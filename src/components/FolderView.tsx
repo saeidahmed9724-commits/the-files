@@ -18,6 +18,7 @@ import {
   History,
   Target,
   Share2,
+  MessagesSquare,
 } from 'lucide-react';
 import { PersonDossier, PredictionEntry } from '../types/dossier';
 import { Page1Character } from './pages/Page1Character';
@@ -26,6 +27,7 @@ import { Page3Triggers } from './pages/Page3Triggers';
 import { Page4Timeline } from './pages/Page4Timeline';
 import { Page5Changes } from './pages/Page5Changes';
 import { Page6Predictions } from './pages/Page6Predictions';
+import { Page7Simulator } from './pages/Page7Simulator';
 import { CopyForAIModal } from './CopyForAIModal';
 import { PasteAIModal } from './PasteAIModal';
 
@@ -56,10 +58,11 @@ export const FolderView: React.FC<FolderViewProps> = ({
     { num: 4, id: 'time', title: 'سجل الملاحظات', icon: Clock, code: 'LOG-04' },
     { num: 5, id: 'evol', title: 'التغير عبر الزمن', icon: History, code: 'EVOL-05' },
     { num: 6, id: 'pred', title: 'التوقعات والفرضيات', icon: Target, code: 'PRED-06' },
+    { num: 7, id: 'sim', title: 'محاكي المواجهات', icon: MessagesSquare, code: 'SIM-07' },
   ];
 
   const goToPage = (pageNumber: number) => {
-    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 6) return;
+    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 7) return;
     setFlipDirection(pageNumber > activePage ? 'next' : 'prev');
     setIsFlipping(true);
     setTimeout(() => {
@@ -69,7 +72,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
   };
 
   const handleNextPage = () => {
-    if (activePage < 6) goToPage(activePage + 1);
+    if (activePage < 7) goToPage(activePage + 1);
   };
 
   const handlePrevPage = () => {
@@ -210,6 +213,9 @@ export const FolderView: React.FC<FolderViewProps> = ({
             {activePage === 6 && (
               <Page6Predictions dossier={dossier} onUpdateDossier={onUpdateDossier} />
             )}
+            {activePage === 7 && (
+              <Page7Simulator dossier={dossier} onUpdateDossier={onUpdateDossier} />
+            )}
           </div>
 
           {/* Bottom Book Page Navigation Bar */}
@@ -227,7 +233,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
 
             {/* Page Indicators */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {[1, 2, 3, 4, 5, 6].map((num) => (
+              {[1, 2, 3, 4, 5, 6, 7].map((num) => (
                 <button
                   key={num}
                   type="button"
@@ -243,7 +249,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
                 </button>
               ))}
               <span className="text-xs font-bold text-[#5c4028] mr-2 font-arabic-body hidden sm:inline">
-                (صفحة {activePage} من ٦)
+                (صفحة {activePage} من ٧)
               </span>
             </div>
 
@@ -251,7 +257,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
             <button
               type="button"
               onClick={handleNextPage}
-              disabled={activePage === 6}
+              disabled={activePage === 7}
               className="px-4 py-2 bg-[#ecdcc4] hover:bg-[#f5e9d6] disabled:opacity-30 disabled:pointer-events-none text-[#2d1c10] font-bold rounded-lg border border-[#a68660] transition flex items-center gap-2 text-xs sm:text-sm shadow-sm"
             >
               <span>الصفحة التالية</span>
