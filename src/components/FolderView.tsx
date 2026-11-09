@@ -19,6 +19,7 @@ import {
   Target,
   Share2,
   MessagesSquare,
+  Users,
 } from 'lucide-react';
 import { PersonDossier, PredictionEntry } from '../types/dossier';
 import { Page1Character } from './pages/Page1Character';
@@ -28,6 +29,7 @@ import { Page4Timeline } from './pages/Page4Timeline';
 import { Page5Changes } from './pages/Page5Changes';
 import { Page6Predictions } from './pages/Page6Predictions';
 import { Page7Simulator } from './pages/Page7Simulator';
+import { Page8Life } from './pages/Page8Life';
 import { CopyForAIModal } from './CopyForAIModal';
 import { PasteAIModal } from './PasteAIModal';
 
@@ -36,6 +38,9 @@ interface FolderViewProps {
   onClose: () => void;
   onUpdateDossier: (updated: Partial<PersonDossier>) => void;
   onDeleteDossier: (id: string) => void;
+  /** Other files in the archive, for linking circle members. */
+  linkable?: { id: string; name: string }[];
+  onOpenLinked?: (id: string) => void;
 }
 
 export const FolderView: React.FC<FolderViewProps> = ({
@@ -43,6 +48,8 @@ export const FolderView: React.FC<FolderViewProps> = ({
   onClose,
   onUpdateDossier,
   onDeleteDossier,
+  linkable = [],
+  onOpenLinked,
 }) => {
   const [activePage, setActivePage] = useState<number>(1);
   const [showCopyModal, setShowCopyModal] = useState(false);
@@ -59,10 +66,11 @@ export const FolderView: React.FC<FolderViewProps> = ({
     { num: 5, id: 'evol', title: 'التغير عبر الزمن', icon: History, code: 'EVOL-05' },
     { num: 6, id: 'pred', title: 'التوقعات والفرضيات', icon: Target, code: 'PRED-06' },
     { num: 7, id: 'sim', title: 'محاكي المواجهات', icon: MessagesSquare, code: 'SIM-07' },
+    { num: 8, id: 'life', title: 'حياته ودايرته', icon: Users, code: 'LIFE-08' },
   ];
 
   const goToPage = (pageNumber: number) => {
-    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 7) return;
+    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 8) return;
     setFlipDirection(pageNumber > activePage ? 'next' : 'prev');
     setIsFlipping(true);
     setTimeout(() => {
@@ -72,7 +80,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
   };
 
   const handleNextPage = () => {
-    if (activePage < 7) goToPage(activePage + 1);
+    if (activePage < 8) goToPage(activePage + 1);
   };
 
   const handlePrevPage = () => {
@@ -205,7 +213,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
               <Page3Triggers dossier={dossier} onUpdateDossier={onUpdateDossier} />
             )}
             {activePage === 4 && (
-              <Page4Timeline dossier={dossier} onUpdateDossier={onUpdateDossier} />
+              <Page4Timeline dossier={dossier} onUpdateDossier={onUpdateDossier} linkable={linkable} />
             )}
             {activePage === 5 && (
               <Page5Changes dossier={dossier} onUpdateDossier={onUpdateDossier} />
@@ -215,6 +223,9 @@ export const FolderView: React.FC<FolderViewProps> = ({
             )}
             {activePage === 7 && (
               <Page7Simulator dossier={dossier} onUpdateDossier={onUpdateDossier} />
+            )}
+            {activePage === 8 && (
+              <Page8Life dossier={dossier} onUpdateDossier={onUpdateDossier} linkable={linkable} onOpenLinked={onOpenLinked} />
             )}
           </div>
 
@@ -233,7 +244,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
 
             {/* Page Indicators */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
                 <button
                   key={num}
                   type="button"
@@ -249,7 +260,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
                 </button>
               ))}
               <span className="text-xs font-bold text-[#5c4028] mr-2 font-arabic-body hidden sm:inline">
-                (صفحة {activePage} من ٧)
+                (صفحة {activePage} من ٨)
               </span>
             </div>
 
@@ -257,7 +268,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
             <button
               type="button"
               onClick={handleNextPage}
-              disabled={activePage === 7}
+              disabled={activePage === 8}
               className="px-4 py-2 bg-[#ecdcc4] hover:bg-[#f5e9d6] disabled:opacity-30 disabled:pointer-events-none text-[#2d1c10] font-bold rounded-lg border border-[#a68660] transition flex items-center gap-2 text-xs sm:text-sm shadow-sm"
             >
               <span>الصفحة التالية</span>

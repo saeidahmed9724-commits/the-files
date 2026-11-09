@@ -297,10 +297,13 @@ export default function App() {
     return (
       <>
         <FolderView
+          key={currentDossier.id}
           dossier={currentDossier}
           onClose={handleCloseDossier}
           onUpdateDossier={handleUpdateDossier}
           onDeleteDossier={handleDeleteDossier}
+          linkable={dossiers.filter((d) => d.id !== currentDossier.id).map((d) => ({ id: d.id, name: d.name }))}
+          onOpenLinked={setSelectedDossierId}
         />
         {statusBar}
       </>

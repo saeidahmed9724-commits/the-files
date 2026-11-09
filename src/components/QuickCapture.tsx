@@ -4,13 +4,25 @@ import { callAI } from '../lib/ai';
 import { blobToAudioPayload, canRecord, MAX_RECORD_SECONDS, pickRecorderMime } from '../lib/audio';
 import {
   EnergyImpact,
+  FactSource,
+  InfluenceLevel,
+  KnowledgeSource,
+  KnowledgeStatus,
   LexiconKind,
+  LifeFactKind,
   ObservationSource,
   ObservationType,
   PersonDossier,
 } from '../types/dossier';
 import { CaptureCounts, CaptureSelection } from '../utils/captureApply';
-import { LEXICON_KIND_LABEL } from '../utils/dossierLogic';
+import {
+  FACT_SOURCE_LABEL,
+  INFLUENCE_LABEL,
+  KNOWLEDGE_SOURCE_LABEL,
+  KNOWLEDGE_STATUS_LABEL,
+  LEXICON_KIND_LABEL,
+  LIFE_KIND_LABEL,
+} from '../utils/dossierLogic';
 import { EnergyPicker } from './EnergyPicker';
 
 interface Props {
@@ -31,7 +43,12 @@ interface Draft {
   triggers: On<{ text: string; severity: 'mild' | 'moderate' | 'high' }>[];
   comforts: On<{ text: string; impact: 'soothing' | 'uplifting' | 'essential' }>[];
   lexicon: On<{ phrase: string; kind: LexiconKind; meaning: string }>[];
+  life: On<{ kind: LifeFactKind; text: string; detail: string; source?: FactSource }>[];
+  knowledge: On<{ text: string; status: KnowledgeStatus; source?: KnowledgeSource; via: string }>[];
+  circle: On<{ name: string; relation: string; tieToMe: string; influence?: InfluenceLevel }>[];
 }
+
+type ListKey = 'entries' | 'changes' | 'triggers' | 'comforts' | 'lexicon' | 'life' | 'knowledge' | 'circle';
 
 const today = () => new Date().toISOString().split('T')[0];
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -50,6 +67,9 @@ function buildDraft(raw: any): Draft {
     triggers: (raw.triggers || []).map((t: any) => ({ ...t, on: true })),
     comforts: (raw.comforts || []).map((c: any) => ({ ...c, on: true })),
     lexicon: (raw.lexicon || []).map((l: any) => ({ ...l, meaning: l.meaning || '', on: true })),
+    life: (raw.life || []).map((f: any) => ({ ...f, detail: f.detail || '', on: true })),
+    knowledge: (raw.knowledge || []).map((k: any) => ({ ...k, via: k.via || '', on: true })),
+    circle: (raw.circle || []).map((c: any) => ({ ...c, tieToMe: c.tieToMe || '', on: true })),
   };
 }
 
@@ -94,6 +114,9 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
     triggers: dossier.triggers,
     comforts: dossier.comforts,
     lexicon: dossier.lexicon,
+    life: dossier.life,
+    knowledge: dossier.knowledge,
+    circle: dossier.circle,
   });
 
   const runExtraction = async (body: Record<string, unknown>) => {
@@ -189,7 +212,7 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
     setPhase('idle');
   };
 
-  const patch = <K extends 'entries' | 'changes' | 'triggers' | 'comforts' | 'lexicon'>(key: K, i: number, change: Partial<Draft[K][number]>) =>
+  const patch = <K extends ListKey>(key: K, i: number, change: Partial<Draft[K][number]>) =>
     setDraft((d) => (d ? { ...d, [key]: d[key].map((x, idx) => (idx === i ? { ...x, ...change } : x)) } : d));
 
   const save = () => {
@@ -200,6 +223,9 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
       triggers: draft.triggers.filter((t) => t.on).map(({ on, ...t }) => t),
       comforts: draft.comforts.filter((c) => c.on).map(({ on, ...c }) => c),
       lexicon: draft.lexicon.filter((l) => l.on).map(({ on, ...l }) => l),
+      life: draft.life.filter((f) => f.on).map(({ on, ...f }) => f),
+      knowledge: draft.knowledge.filter((k) => k.on).map(({ on, ...k }) => k),
+      circle: draft.circle.filter((c) => c.on).map(({ on, ...c }) => c),
     };
     const counts = onApply(selection, draft.date || today());
     setSaved(counts);
@@ -209,7 +235,10 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
   };
 
   const selectedCount = draft
-    ? [draft.entries, draft.changes, draft.triggers, draft.comforts, draft.lexicon].reduce((n, a) => n + a.filter((x) => x.on).length, 0)
+    ? [draft.entries, draft.changes, draft.triggers, draft.comforts, draft.lexicon, draft.life, draft.knowledge, draft.circle].reduce(
+        (n, a) => n + a.filter((x) => x.on).length,
+        0
+      )
     : 0;
 
   const check = (on: boolean, set: (v: boolean) => void, label: string) => (
@@ -265,6 +294,9 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
           {saved.triggers ? `، ${saved.triggers} محفز` : ''}
           {saved.comforts ? `، ${saved.comforts} مريح` : ''}
           {saved.lexicon ? `، ${saved.lexicon} في القاموس` : ''}
+          {saved.life ? `، ${saved.life} عن حياته` : ''}
+          {saved.knowledge ? `، ${saved.knowledge} عن اللي عارفه عني` : ''}
+          {saved.circle ? `، ${saved.circle} في دايرته` : ''}
           {saved.skippedDuplicates ? ` (اتخطّينا ${saved.skippedDuplicates} مكرر)` : ''}.
         </div>
       )}
@@ -431,7 +463,121 @@ export const QuickCapture: React.FC<Props> = ({ dossier, onApply }) => {
               </div>
             )))}
 
-          {selectedCount === 0 && draft.entries.length + draft.changes.length + draft.triggers.length + draft.comforts.length + draft.lexicon.length === 0 && (
+          {section('حياته اليومية ← صفحة حياته ودايرته', draft.life.length,
+            draft.life.map((f, i) => (
+              <div key={i} className="flex gap-2 p-2 bg-[#faf5ec] border border-[#d6be90] rounded">
+                {check(f.on, (v) => patch('life', i, { on: v }), 'حفظ معلومة عن حياته')}
+                <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <select
+                    value={f.kind}
+                    onChange={(ev) => patch('life', i, { kind: ev.target.value as LifeFactKind })}
+                    className="bg-[#faf5eb] border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  >
+                    {(Object.keys(LIFE_KIND_LABEL) as LifeFactKind[]).map((k) => (
+                      <option key={k} value={k}>{LIFE_KIND_LABEL[k]}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={f.text}
+                    onChange={(ev) => patch('life', i, { text: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none sm:col-span-2"
+                  />
+                  <input
+                    value={f.detail}
+                    placeholder="قد إيه / إمتى؟"
+                    onChange={(ev) => patch('life', i, { detail: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none sm:col-span-2"
+                  />
+                  <select
+                    value={f.source || ''}
+                    onChange={(ev) => patch('life', i, { source: (ev.target.value || undefined) as FactSource | undefined })}
+                    className="bg-[#faf5eb] border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  >
+                    <option value="">المصدر؟</option>
+                    {(Object.keys(FACT_SOURCE_LABEL) as FactSource[]).map((k) => (
+                      <option key={k} value={k}>{FACT_SOURCE_LABEL[k]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )))}
+
+          {section('هو عارف إيه عني ← سجل المعرفة', draft.knowledge.length,
+            draft.knowledge.map((k, i) => (
+              <div key={i} className="flex gap-2 p-2 bg-[#faf5ec] border border-[#d6be90] rounded">
+                {check(k.on, (v) => patch('knowledge', i, { on: v }), 'حفظ في سجل المعرفة')}
+                <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <input
+                    value={k.text}
+                    onChange={(ev) => patch('knowledge', i, { text: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none sm:col-span-3"
+                  />
+                  <select
+                    value={k.status}
+                    onChange={(ev) => patch('knowledge', i, { status: ev.target.value as KnowledgeStatus })}
+                    className="bg-[#faf5eb] border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  >
+                    {(Object.keys(KNOWLEDGE_STATUS_LABEL) as KnowledgeStatus[]).map((x) => (
+                      <option key={x} value={x}>{KNOWLEDGE_STATUS_LABEL[x]}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={k.source || ''}
+                    onChange={(ev) => patch('knowledge', i, { source: (ev.target.value || undefined) as KnowledgeSource | undefined })}
+                    className="bg-[#faf5eb] border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  >
+                    <option value="">عرفها إزاي؟</option>
+                    {(Object.keys(KNOWLEDGE_SOURCE_LABEL) as KnowledgeSource[]).map((x) => (
+                      <option key={x} value={x}>{KNOWLEDGE_SOURCE_LABEL[x]}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={k.via}
+                    placeholder="عن طريق مين؟"
+                    onChange={(ev) => patch('knowledge', i, { via: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  />
+                </div>
+              </div>
+            )))}
+
+          {section('ناس في حياته ← دايرته', draft.circle.length,
+            draft.circle.map((c, i) => (
+              <div key={i} className="flex gap-2 p-2 bg-[#faf5ec] border border-[#d6be90] rounded">
+                {check(c.on, (v) => patch('circle', i, { on: v }), 'حفظ في دايرته')}
+                <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <input
+                    value={c.name}
+                    onChange={(ev) => patch('circle', i, { name: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  />
+                  <input
+                    value={c.relation}
+                    placeholder="علاقته بيه"
+                    onChange={(ev) => patch('circle', i, { relation: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  />
+                  <select
+                    value={c.influence || ''}
+                    onChange={(ev) => patch('circle', i, { influence: (ev.target.value || undefined) as InfluenceLevel | undefined })}
+                    className="bg-[#faf5eb] border border-[#a68660] p-1.5 text-xs rounded focus:outline-none"
+                  >
+                    <option value="">بيسمع كلامه؟</option>
+                    {(Object.keys(INFLUENCE_LABEL) as InfluenceLevel[]).map((x) => (
+                      <option key={x} value={x}>{INFLUENCE_LABEL[x]}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={c.tieToMe}
+                    placeholder="علاقته بيا (اختياري)"
+                    onChange={(ev) => patch('circle', i, { tieToMe: ev.target.value })}
+                    className="bg-white border border-[#a68660] p-1.5 text-xs rounded focus:outline-none sm:col-span-3"
+                  />
+                </div>
+              </div>
+            )))}
+
+          {selectedCount === 0 && draft.entries.length + draft.changes.length + draft.triggers.length + draft.comforts.length + draft.lexicon.length + draft.life.length + draft.knowledge.length + draft.circle.length === 0 && (
             <p className="text-xs text-[#6e5033] mb-3">ما لقيتش حاجة واضحة أحفظها. جرّب تحكي بتفاصيل أكتر.</p>
           )}
 

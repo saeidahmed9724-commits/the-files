@@ -89,6 +89,20 @@ export const INITIAL_DOSSIERS: PersonDossier[] = [
         tags: ['ولاء', 'نصيحة'],
       },
     ],
+    life: [
+      { id: 'life-1', kind: 'home', text: 'بيسكن في التجمع الخامس', source: 'told_me' },
+      { id: 'life-2', kind: 'routine', text: 'بيصحى بدري ويبدأ شغل قبل الزحمة', detail: 'أغلب أيام الأسبوع', source: 'seen' },
+      { id: 'life-3', kind: 'place', text: 'قهوة مختصة هادية في المعادي', detail: 'مرتين في الأسبوع تقريبًا', source: 'seen' },
+    ],
+    knowledge: [
+      { id: 'know-1', text: 'إني بفكر أغير شغلي', status: 'knows', source: 'i_told' },
+      { id: 'know-2', text: 'خطتي في المشروع المشترك', status: 'unsure', source: 'inferred' },
+      { id: 'know-3', text: 'مشكلتي المالية الأخيرة', status: 'unknown' },
+    ],
+    circle: [
+      { id: 'circ-1', name: 'سارة الشريف', relation: 'قريبته وبيثق في رأيها', tieToMe: 'صديقتي', influence: 'high', linkedDossierId: 'dos-sara-02' },
+      { id: 'circ-2', name: 'مديره المباشر', relation: 'شغل', influence: 'medium' },
+    ],
     lexicon: [
       { id: 'lex-1', phrase: 'خلينا نكون عمليين', kind: 'stress_word', meaning: 'بيحاول يقفل نقاش بدأ يضايقه' },
       { id: 'lex-2', phrase: 'بصراحة', kind: 'tell', meaning: 'غالبًا هيقول رأي مش مرتاح يقوله' },

@@ -288,3 +288,40 @@ test('applyCapture: change notes are kept in changeLog without wiping the AI ana
 test('normalizeText ignores diacritics, hamza forms and punctuation', () => {
   assert.equal(normalizeText('أَحْمد!'), normalizeText('احمد'));
 });
+
+test('applyCapture: life, knowledge and circle are added, deduped, and circle names link to existing files', () => {
+  const d = {
+    ...baseDossier(),
+    life: [{ id: 'f0', kind: 'home', text: 'التجمع الخامس' }],
+    circle: [{ id: 'c0', name: 'منى', relation: 'أخته' }],
+  } as unknown as PersonDossier;
+  const { patch, counts } = applyCapture(
+    d,
+    {
+      entries: [],
+      changes: [],
+      triggers: [],
+      comforts: [],
+      lexicon: [],
+      life: [
+        { kind: 'home', text: 'التجمع الخامس' },
+        { kind: 'place', text: 'نادي الشمس', detail: 'الجمعة', source: 'seen' },
+      ],
+      knowledge: [{ text: 'إني غيرت شغلي', status: 'knows', source: 'heard_from_other', via: 'منى' }],
+      circle: [
+        { name: 'منى', relation: 'أخته' },
+        { name: 'سارة', relation: 'صاحبته', influence: 'high' },
+      ],
+    },
+    '2026-11-09',
+    1000,
+    [{ id: 'dos-sara', name: 'سارة' }]
+  );
+  assert.equal(patch.life?.length, 2);
+  assert.equal(patch.life?.[0].text, 'نادي الشمس');
+  assert.equal(patch.knowledge?.[0].via, 'منى');
+  assert.equal(patch.circle?.length, 2);
+  assert.equal(patch.circle?.[0].linkedDossierId, 'dos-sara');
+  assert.equal(counts.skippedDuplicates, 2);
+  assert.equal(counts.circle, 1);
+});

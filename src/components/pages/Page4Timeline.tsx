@@ -8,9 +8,10 @@ import { applyCapture, CaptureSelection } from '../../utils/captureApply';
 interface Page4TimelineProps {
   dossier: PersonDossier;
   onUpdateDossier: (updated: Partial<PersonDossier>) => void;
+  linkable?: { id: string; name: string }[];
 }
 
-export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateDossier }) => {
+export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateDossier, linkable = [] }) => {
   const [timeline, setTimeline] = useState<TimelineEntry[]>(dossier.timeline || []);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -75,7 +76,7 @@ export const Page4Timeline: React.FC<Page4TimelineProps> = ({ dossier, onUpdateD
   };
 
   const handleCapture = (selection: CaptureSelection, date: string) => {
-    const { patch, counts } = applyCapture({ ...dossier, timeline }, selection, date);
+    const { patch, counts } = applyCapture({ ...dossier, timeline }, selection, date, Date.now(), linkable);
     if (patch.timeline) setTimeline(patch.timeline);
     onUpdateDossier(patch);
     return counts;

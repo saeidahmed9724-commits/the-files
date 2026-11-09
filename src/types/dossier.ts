@@ -8,6 +8,13 @@ export type EnergyImpact = 'positive' | 'negative' | 'draining';
 
 export type LexiconKind = 'stress_word' | 'tic' | 'body_language' | 'tell';
 
+// Life & circle page
+export type LifeFactKind = 'home' | 'work' | 'routine' | 'place' | 'other';
+export type FactSource = 'seen' | 'told_me' | 'heard'; // I saw it / he told me / heard it from someone
+export type KnowledgeStatus = 'knows' | 'unsure' | 'unknown'; // does he know this about me?
+export type KnowledgeSource = 'i_told' | 'heard_from_other' | 'inferred';
+export type InfluenceLevel = 'low' | 'medium' | 'high';
+
 export type PredictionVerdict = 'correct' | 'partially_correct' | 'incorrect' | 'pending';
 
 export interface MindThinking {
@@ -58,6 +65,34 @@ export interface LexiconItem {
   meaning?: string; // what it usually signals, in the user's own words
 }
 
+/** One fact about the person's daily life: where he lives (area only), work, routine, places he goes. */
+export interface LifeFact {
+  id: string;
+  kind: LifeFactKind;
+  text: string;
+  detail?: string; // how often / when
+  source?: FactSource;
+}
+
+/** One thing about the user, and whether this person knows it. */
+export interface KnowledgeItem {
+  id: string;
+  text: string;
+  status: KnowledgeStatus;
+  source?: KnowledgeSource;
+  via?: string; // who passed it on to him, if known
+}
+
+/** Someone in the person's life who matters to the user. */
+export interface CircleMember {
+  id: string;
+  name: string;
+  relation: string; // his relation to this person (brother, boss...)
+  tieToMe?: string; // how that person relates to the user
+  influence?: InfluenceLevel; // does he listen to them? unset = not rated
+  linkedDossierId?: string; // another file in the archive
+}
+
 export interface ChangeNote {
   id: string;
   date: string;
@@ -104,6 +139,9 @@ export interface PersonDossier {
   comforts: ComfortItem[];
   timeline: TimelineEntry[];
   lexicon?: LexiconItem[];
+  life?: LifeFact[];
+  knowledge?: KnowledgeItem[];
+  circle?: CircleMember[];
   changesOverTime: ChangesReport;
   predictions: PredictionEntry[];
 }

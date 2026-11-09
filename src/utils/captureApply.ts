@@ -1,6 +1,14 @@
 import {
   ChangeNote,
+  CircleMember,
   ComfortItem,
+  FactSource,
+  InfluenceLevel,
+  KnowledgeItem,
+  KnowledgeSource,
+  KnowledgeStatus,
+  LifeFact,
+  LifeFactKind,
   EnergyImpact,
   LexiconItem,
   LexiconKind,
@@ -24,6 +32,9 @@ export interface CaptureSelection {
   triggers: { text: string; severity: 'mild' | 'moderate' | 'high' }[];
   comforts: { text: string; impact: 'soothing' | 'uplifting' | 'essential' }[];
   lexicon: { phrase: string; kind: LexiconKind; meaning?: string }[];
+  life?: { kind: LifeFactKind; text: string; detail?: string; source?: FactSource }[];
+  knowledge?: { text: string; status: KnowledgeStatus; source?: KnowledgeSource; via?: string }[];
+  circle?: { name: string; relation: string; tieToMe?: string; influence?: InfluenceLevel }[];
 }
 
 export interface CaptureCounts {
@@ -32,6 +43,9 @@ export interface CaptureCounts {
   triggers: number;
   comforts: number;
   lexicon: number;
+  life: number;
+  knowledge: number;
+  circle: number;
   skippedDuplicates: number;
 }
 
@@ -58,10 +72,12 @@ export function applyCapture(
   dossier: PersonDossier,
   sel: CaptureSelection,
   date: string,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  /** Other files in the archive; a circle member whose name matches one is linked to it. */
+  linkable: { id: string; name: string }[] = []
 ): { patch: Partial<PersonDossier>; counts: CaptureCounts } {
   const patch: Partial<PersonDossier> = {};
-  const counts: CaptureCounts = { entries: 0, changes: 0, triggers: 0, comforts: 0, lexicon: 0, skippedDuplicates: 0 };
+  const counts: CaptureCounts = { entries: 0, changes: 0, triggers: 0, comforts: 0, lexicon: 0, life: 0, knowledge: 0, circle: 0, skippedDuplicates: 0 };
   const id = (prefix: string, i: number) => `${prefix}-${nowMs}-${i}`;
 
   const entries: TimelineEntry[] = sel.entries
@@ -135,6 +151,56 @@ export function applyCapture(
   if (lexicon.length) {
     patch.lexicon = [...lexicon, ...(dossier.lexicon || [])];
     counts.lexicon = lexicon.length;
+  }
+
+  const knownLife = seen((dossier.life || []).map((f) => f.text));
+  const life: LifeFact[] = [];
+  (sel.life || []).forEach((f, i) => {
+    const n = normalizeText(f.text);
+    if (!n) return;
+    if (knownLife.has(n)) return void counts.skippedDuplicates++;
+    knownLife.add(n);
+    life.push({ id: id('life', i), kind: f.kind, text: f.text.trim(), detail: f.detail?.trim() || undefined, source: f.source });
+  });
+  if (life.length) {
+    patch.life = [...life, ...(dossier.life || [])];
+    counts.life = life.length;
+  }
+
+  const knownKnowledge = seen((dossier.knowledge || []).map((k) => k.text));
+  const knowledge: KnowledgeItem[] = [];
+  (sel.knowledge || []).forEach((k, i) => {
+    const n = normalizeText(k.text);
+    if (!n) return;
+    if (knownKnowledge.has(n)) return void counts.skippedDuplicates++;
+    knownKnowledge.add(n);
+    knowledge.push({ id: id('know', i), text: k.text.trim(), status: k.status, source: k.source, via: k.via?.trim() || undefined });
+  });
+  if (knowledge.length) {
+    patch.knowledge = [...knowledge, ...(dossier.knowledge || [])];
+    counts.knowledge = knowledge.length;
+  }
+
+  const knownCircle = seen((dossier.circle || []).map((c) => c.name));
+  const circle: CircleMember[] = [];
+  (sel.circle || []).forEach((c, i) => {
+    const n = normalizeText(c.name);
+    if (!n) return;
+    if (knownCircle.has(n)) return void counts.skippedDuplicates++;
+    knownCircle.add(n);
+    const match = linkable.find((l) => normalizeText(l.name) === n);
+    circle.push({
+      id: id('circ', i),
+      name: c.name.trim(),
+      relation: c.relation.trim(),
+      tieToMe: c.tieToMe?.trim() || undefined,
+      influence: c.influence,
+      linkedDossierId: match?.id,
+    });
+  });
+  if (circle.length) {
+    patch.circle = [...circle, ...(dossier.circle || [])];
+    counts.circle = circle.length;
   }
 
   return { patch, counts };

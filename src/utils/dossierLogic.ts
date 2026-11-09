@@ -1,4 +1,15 @@
-import { EnergyImpact, LexiconKind, PersonDossier, PredictionEntry, TimelineEntry } from '../types/dossier';
+import {
+  EnergyImpact,
+  FactSource,
+  InfluenceLevel,
+  KnowledgeSource,
+  KnowledgeStatus,
+  LexiconKind,
+  LifeFactKind,
+  PersonDossier,
+  PredictionEntry,
+  TimelineEntry,
+} from '../types/dossier';
 
 export interface PredictionStats {
   total: number;
@@ -70,6 +81,40 @@ export const LEXICON_KIND_LABEL: Record<LexiconKind, string> = {
   body_language: 'لغة جسد',
   tell: 'علامة كدب / حماس',
 };
+
+export const LIFE_KIND_LABEL: Record<LifeFactKind, string> = {
+  home: 'سكنه (المنطقة)',
+  work: 'شغله',
+  routine: 'روتينه',
+  place: 'مكان بيروحه',
+  other: 'معلومة تانية',
+};
+export const FACT_SOURCE_LABEL: Record<FactSource, string> = {
+  seen: 'شفته بنفسي',
+  told_me: 'هو قالي',
+  heard: 'سمعتها من حد',
+};
+export const KNOWLEDGE_STATUS_LABEL: Record<KnowledgeStatus, string> = {
+  knows: 'عارفها',
+  unsure: 'مش متأكد',
+  unknown: 'مش عارفها',
+};
+export const KNOWLEDGE_SOURCE_LABEL: Record<KnowledgeSource, string> = {
+  i_told: 'أنا قلتله',
+  heard_from_other: 'عرفها من حد',
+  inferred: 'استنتجها',
+};
+export const INFLUENCE_LABEL: Record<InfluenceLevel, string> = {
+  high: 'بيسمع كلامه جدًا',
+  medium: 'بيسمع له أحيانًا',
+  low: 'تأثيره قليل',
+};
+const INFLUENCE_RANK: Record<InfluenceLevel, number> = { high: 3, medium: 2, low: 1 };
+
+/** Circle sorted by how much he listens to them (unrated last). */
+export function sortCircleByInfluence<T extends { influence?: InfluenceLevel }>(circle: T[] = []): T[] {
+  return [...circle].sort((a, b) => (b.influence ? INFLUENCE_RANK[b.influence] : 0) - (a.influence ? INFLUENCE_RANK[a.influence] : 0));
+}
 
 /** An observation counts half as much every HALF_LIFE_DAYS days: the meter drifts on its own. */
 export const BATTERY_HALF_LIFE_DAYS = 45;
@@ -304,6 +349,34 @@ export function formatDossierForAI(dossier: PersonDossier): string {
     lines.push(`(لا توجد ملاحظات مسجلة)`);
   }
   lines.push(``);
+
+  if (dossier.life && dossier.life.length > 0) {
+    lines.push(`--- حياته اليومية ---`);
+    dossier.life.forEach((f) => {
+      lines.push(`- ${LIFE_KIND_LABEL[f.kind]}: ${f.text}${f.detail ? ` (${f.detail})` : ''}${f.source ? ` [${FACT_SOURCE_LABEL[f.source]}]` : ''}`);
+    });
+    lines.push(``);
+  }
+
+  if (dossier.knowledge && dossier.knowledge.length > 0) {
+    lines.push(`--- هو عارف إيه عني ---`);
+    dossier.knowledge.forEach((k) => {
+      lines.push(
+        `- ${k.text} → ${KNOWLEDGE_STATUS_LABEL[k.status]}${k.source ? ` (${KNOWLEDGE_SOURCE_LABEL[k.source]}${k.via ? ` عن طريق ${k.via}` : ''})` : ''}`
+      );
+    });
+    lines.push(``);
+  }
+
+  if (dossier.circle && dossier.circle.length > 0) {
+    lines.push(`--- دايرته (الناس في حياته) ---`);
+    sortCircleByInfluence(dossier.circle).forEach((c) => {
+      lines.push(
+        `- ${c.name} (${c.relation})${c.tieToMe ? ` | علاقته بيا: ${c.tieToMe}` : ''}${c.influence ? ` | ${INFLUENCE_LABEL[c.influence]}` : ''}`
+      );
+    });
+    lines.push(``);
+  }
 
   const battery = calculateSocialBattery(dossier.timeline);
   if (!battery.lowData) {

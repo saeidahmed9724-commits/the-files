@@ -72,6 +72,30 @@ function lexiconBlock(d: any): string {
     : '';
 }
 
+const LIFE_KIND_AR: Record<string, string> = { home: 'سكنه', work: 'شغله', routine: 'روتينه', place: 'مكان بيروحه', other: 'معلومة' };
+const KNOW_STATUS_AR: Record<string, string> = { knows: 'عارفها', unsure: 'غالبًا عارفها (مش متأكد)', unknown: 'مش عارفها' };
+const INFLUENCE_AR: Record<string, string> = { high: 'بيسمع كلامه جدًا', medium: 'بيسمع له أحيانًا', low: 'تأثيره قليل' };
+
+/** His daily life, what he knows about the user, and who is in his circle. */
+function contextBlock(d: any): string {
+  const life = (d.life || [])
+    .slice(0, 20)
+    .map((f: any) => `- ${LIFE_KIND_AR[f.kind] || 'معلومة'}: ${f.text}${f.detail ? ` (${f.detail})` : ''}`);
+  const know = (d.knowledge || [])
+    .slice(0, 20)
+    .map((k: any) => `- ${k.text} → ${KNOW_STATUS_AR[k.status] || ''}${k.via ? ` (عرفها عن طريق ${k.via})` : ''}`);
+  const rank: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  const circle = [...(d.circle || [])]
+    .sort((a: any, b: any) => (rank[b.influence] || 0) - (rank[a.influence] || 0))
+    .slice(0, 15)
+    .map((c: any) => `- ${c.name} (${c.relation})${c.tieToMe ? `، علاقته بيا: ${c.tieToMe}` : ''}${c.influence ? `، ${INFLUENCE_AR[c.influence]}` : ''}`);
+  const parts: string[] = [];
+  if (life.length) parts.push(`حياته اليومية:\n${life.join('\n')}`);
+  if (know.length) parts.push(`هو عارف إيه عن المستخدم:\n${know.join('\n')}`);
+  if (circle.length) parts.push(`الناس في دايرته (مرتبين بتأثيرهم عليه):\n${circle.join('\n')}`);
+  return parts.length ? `\n${parts.join('\n\n')}\n` : '';
+}
+
 function changeLogBlock(d: any): string {
   const items = (d.changesOverTime?.changeLog || [])
     .slice(-8)
@@ -92,7 +116,7 @@ function buildSummaryPrompt(d: any): string {
 - اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'لا يوجد'}
 - اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'لا يوجد'}
 - آخر الملاحظات: ${d.timeline?.slice(-8).map((n: any) => noteLine(n, true)).join('\n') || 'لا توجد ملاحظات كافية'}
-${lexiconBlock(d)}${confirmedBlock(d)}
+${lexiconBlock(d)}${contextBlock(d)}${confirmedBlock(d)}
 المطلوب:
 لخّص شخصيته في 3 لـ 4 جمل (حوالي 80 كلمة): هو إيه نوعه، إيه اللي بيحركه، إيه اللي بيضايقه وبيريحه، وأحسن طريقة تتعامل بيها معاه.`;
 }
@@ -125,7 +149,7 @@ function buildPredictPrompt(d: any, scenario: string): string {
 - اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
 - اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
 - مواقف سابقة: ${d.timeline?.slice(-10).map((n: any) => noteLine(n)).join(' | ') || 'لا توجد'}
-${lexiconBlock(d)}${confirmedBlock(d)}
+${lexiconBlock(d)}${contextBlock(d)}${confirmedBlock(d)}
 الموقف أو الرسالة اللي المستخدم ناوي يقولها:
 "${scenario}"
 
@@ -168,7 +192,7 @@ function profileBlock(d: any): string {
 - اللي بيضايقه: ${d.triggers?.map((t: any) => t.text).join('، ') || 'غير مسجل'}
 - اللي بيريحه: ${d.comforts?.map((c: any) => c.text).join('، ') || 'غير مسجل'}
 - مواقف سابقة: ${d.timeline?.slice(-10).map((n: any) => noteLine(n)).join(' | ') || 'لا توجد'}
-${lexiconBlock(d)}${confirmedBlock(d)}`;
+${lexiconBlock(d)}${contextBlock(d)}${confirmedBlock(d)}`;
 }
 
 function cleanHistory(history: any): { role: 'me' | 'them'; text: string }[] {
@@ -236,7 +260,10 @@ const EXTRACT_FORMAT = `{
   "changes": [ "جملة قصيرة بتقول إيه اللي اتغير في شخصيته أو تصرفه عن المعتاد" ],
   "triggers": [ { "text": "حاجة بتضايقه أو بتفجره", "severity": "mild | moderate | high" } ],
   "comforts": [ { "text": "حاجة بتريحه أو بتحسّنه", "impact": "soothing | uplifting | essential" } ],
-  "lexicon": [ { "phrase": "الكلمة أو العبارة أو الحركة", "kind": "stress_word | tic | body_language | tell", "meaning": "بتدل على إيه (بس لو المستخدم فسّرها)" } ]
+  "lexicon": [ { "phrase": "الكلمة أو العبارة أو الحركة", "kind": "stress_word | tic | body_language | tell", "meaning": "بتدل على إيه (بس لو المستخدم فسّرها)" } ],
+  "life": [ { "kind": "home | work | routine | place | other", "text": "معلومة عن حياته اليومية", "detail": "قد إيه أو إمتى (اختياري)", "source": "seen | told_me | heard" } ],
+  "knowledge": [ { "text": "معلومة عن المستخدم", "status": "knows | unsure | unknown", "source": "i_told | heard_from_other | inferred", "via": "اسم اللي وصّلها له (اختياري)" } ],
+  "circle": [ { "name": "اسم شخص في حياته", "relation": "علاقته هو بيه", "tieToMe": "علاقة الشخص ده بالمستخدم (اختياري)", "influence": "high | medium | low | null" } ]
 }`;
 
 function buildExtractPrompt(d: any, text: string, hasAudio: boolean): string {
@@ -245,7 +272,7 @@ function buildExtractPrompt(d: any, text: string, hasAudio: boolean): string {
 ${hasAudio ? 'الملاحظة في الفويس المرفق.' : `الملاحظة:\n"""${text}"""`}
 
 المسجل بالفعل في الملف (متكررش منه حاجة بنفس المعنى):
-${known('اللي بيضايقه', (d.triggers || []).map((t: any) => t.text))}${known('اللي بيريحه', (d.comforts || []).map((c: any) => c.text))}${known('قاموسه', (d.lexicon || []).map((l: any) => l.phrase))}
+${known('اللي بيضايقه', (d.triggers || []).map((t: any) => t.text))}${known('اللي بيريحه', (d.comforts || []).map((c: any) => c.text))}${known('قاموسه', (d.lexicon || []).map((l: any) => l.phrase))}${known('حياته المسجلة', (d.life || []).map((f: any) => f.text))}${known('اللي هو عارفه عني', (d.knowledge || []).map((k: any) => k.text))}${known('دايرته (استخدم نفس الأسماء)', (d.circle || []).map((c: any) => c.name))}
 المطلوب: وزّع الملاحظة بالشكل ده بالظبط:
 ${EXTRACT_FORMAT}
 
@@ -254,7 +281,10 @@ ${EXTRACT_FORMAT}
 - energy: positive لو المستخدم قال إنه اتشحن أو ارتاح أو استمتع، negative لو ضايقه أو زعّله، draining لو حس بإرهاق أو استنزاف أو تعب بعد القعدة. لو مش واضح خلّيها null ومتخمّنش.
 - changes: بس لو المستخدم صرّح إنه اتغير عن عادته أو اتصرف عكس طبيعته.
 - triggers وcomforts: بس لو ظهر بوضوح إيه اللي بيضايقه أو بيريحه.
-- lexicon: بس الكلمات واللزمات وحركات الجسم اللي اتذكرت صراحة (زي "لما بدأ بـ بصراحة"، "لما اتوتر هزر كتير").`;
+- lexicon: بس الكلمات واللزمات وحركات الجسم اللي اتذكرت صراحة (زي "لما بدأ بـ بصراحة"، "لما اتوتر هزر كتير").
+- life: بس معلومات عن حياته اليومية اتذكرت صراحة: سكنه (المنطقة بس، متكتبش عنوان تفصيلي أو رقم)، شغله، روتينه، أماكن بيروحها. source = seen لو المستخدم شافه بنفسه، told_me لو هو قال، heard لو سمعها من حد.
+- knowledge: بس حاجات عن المستخدم هو عارفها أو اتقال إنه عرفها أو اتقال إنه ميعرفهاش. status = knows لو اتأكد، unsure لو المستخدم مش متأكد، unknown لو اتقال إنه مش عارف. via لو اتذكر مين وصّلها له.
+- circle: بس الناس اللي اتذكروا صراحة في حياته (غير المستخدم نفسه). influence = high لو اتقال إنه بيسمع كلامه، low لو اتقال إن تأثيره قليل، وإلا null ومتخمّنش.`;
 }
 
 const oneOf = <T extends string>(v: any, allowed: readonly T[], fallback: T): T =>
@@ -282,6 +312,30 @@ function sanitizeExtraction(raw: any): any {
     comforts: arr(raw?.comforts, 5)
       .map((c: any) => ({ text: str(c?.text, 300), impact: oneOf(c?.impact, ['soothing', 'uplifting', 'essential'] as const, 'soothing') }))
       .filter((c: any) => c.text),
+    life: arr(raw?.life, 8)
+      .map((f: any) => ({
+        kind: oneOf(f?.kind, ['home', 'work', 'routine', 'place', 'other'] as const, 'other'),
+        text: str(f?.text, 300),
+        detail: str(f?.detail, 120),
+        source: ['seen', 'told_me', 'heard'].includes(f?.source) ? f.source : undefined,
+      }))
+      .filter((f: any) => f.text),
+    knowledge: arr(raw?.knowledge, 8)
+      .map((k: any) => ({
+        text: str(k?.text, 300),
+        status: oneOf(k?.status, ['knows', 'unsure', 'unknown'] as const, 'unsure'),
+        source: ['i_told', 'heard_from_other', 'inferred'].includes(k?.source) ? k.source : undefined,
+        via: str(k?.via, 80),
+      }))
+      .filter((k: any) => k.text),
+    circle: arr(raw?.circle, 8)
+      .map((c: any) => ({
+        name: str(c?.name, 80),
+        relation: str(c?.relation, 120),
+        tieToMe: str(c?.tieToMe, 160),
+        influence: ['high', 'medium', 'low'].includes(c?.influence) ? c.influence : undefined,
+      }))
+      .filter((c: any) => c.name),
     lexicon: arr(raw?.lexicon, 8)
       .map((l: any) => ({
         phrase: str(l?.phrase, 120),
