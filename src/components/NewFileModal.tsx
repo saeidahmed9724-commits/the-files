@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, UserPlus, Image, Sparkles, Loader2 } from 'lucide-react';
 import { uploadDossierPhoto } from '../lib/photos';
 import { PersonDossier } from '../types/dossier';
@@ -39,8 +40,6 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
     setPhotoPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [photoFile]);
-
-  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,8 +113,21 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-lg w-full rounded-lg shadow-2xl relative p-6 my-8 text-right font-arabic-body">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-lg w-full rounded-lg shadow-2xl relative p-6 my-8 text-right font-arabic-body"
+            initial={{ opacity: 0, scale: 0.85, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85, y: 30 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          >
         {/* Brass Header Badge */}
         <div className="flex justify-between items-center pb-4 mb-4 border-b-2 border-[#b5956f]">
           <button
@@ -290,17 +302,21 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({ isOpen, onClose, onA
             >
               إلغاء
             </button>
-            <button
+            <motion.button
               type="submit"
               disabled={isSaving}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               className="px-5 py-2 bg-[#8c1d18] hover:bg-[#731713] disabled:opacity-60 text-[#fbf7ee] font-bold rounded shadow transition text-sm flex items-center gap-2"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
               <span>{isSaving ? 'جاري رفع الصورة...' : 'إيداع في الأرشيف'}</span>
-            </button>
+            </motion.button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

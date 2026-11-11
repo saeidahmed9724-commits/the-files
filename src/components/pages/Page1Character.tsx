@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { callAI } from '../../lib/ai';
 import { uploadDossierPhoto } from '../../lib/photos';
 import { DossierPhoto } from '../DossierPhoto';
@@ -97,7 +98,7 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
         </div>
 
         <div className="flex items-center gap-2 mt-3 sm:mt-0">
-          <span className="stamp-red text-xs">سري للغاية • TOP SECRET</span>
+          <span className="stamp-red stamp-animate text-xs">سري للغاية • TOP SECRET</span>
           <button
             type="button"
             onClick={() => (isEditingFields ? handleSaveFields() : setIsEditingFields(true))}
@@ -264,7 +265,13 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
 
         {/* Polaroid Photo with Metallic Paper Clip */}
         <div className="md:col-span-4 flex flex-col items-center justify-center relative">
-          <div className="relative transform rotate-2 hover:rotate-0 transition-transform duration-300">
+          <motion.div
+            initial={{ opacity: 0, rotate: 6, scale: 0.92 }}
+            animate={{ opacity: 1, rotate: 2, scale: 1 }}
+            whileHover={{ rotate: 0, scale: 1.04, y: -4 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            className="relative"
+          >
             {/* Paper Clip Visual */}
             <div className="paperclip-clip -top-4 right-4" />
 
@@ -283,12 +290,17 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
                 </p>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
 
       {/* Latest Observation Box (QUOTE BOX from reference image) */}
-      <div className="mb-6 bg-[#f2e7d0] border-2 border-[#ab8e67] p-4 rounded-md shadow-inner relative">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.4 }}
+        className="mb-6 bg-[#f2e7d0] border-2 border-[#ab8e67] p-4 rounded-md shadow-inner relative"
+      >
         <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-[#cca779]">
           <div className="flex items-center gap-2">
             <Quote className="w-4 h-4 text-[#8c1d18]" />
@@ -324,7 +336,7 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
             <span>المصدر: {latestObservation.source === 'seen' ? 'معاينة شخصية' : 'استنتاج'}</span>
           </div>
         )}
-      </div>
+      </motion.div>
 
       <SocialBatteryMeter dossier={dossier} onGoToTimeline={onGoToPage ? () => onGoToPage(4) : undefined} />
 
@@ -349,22 +361,24 @@ export const Page1Character: React.FC<Page1CharacterProps> = ({ dossier, onUpdat
           {/* 5-Star Interactive Rating */}
           <div className="flex items-center justify-center gap-2 py-2 bg-[#eae0c8] rounded border border-[#cca779]">
             {[1, 2, 3, 4, 5].map((star) => (
-              <button
+              <motion.button
                 key={star}
                 type="button"
                 onClick={() => handleStarClick(star)}
-                className="p-1 hover:scale-125 transition-transform"
+                whileHover={{ scale: 1.25 }}
+                whileTap={{ scale: 0.85 }}
+                className="p-1"
                 title={`${star} من 5 نجوم`}
                 aria-label={`تقييم ${star} نجوم`}
               >
                 <Star
-                  className={`w-6 h-6 ${
+                  className={`w-6 h-6 transition-colors ${
                     star <= (dossier.emotionalStability || 3)
                       ? 'fill-[#8c1d18] text-[#8c1d18]'
                       : 'text-[#ab8e67] hover:text-[#8c1d18]/50'
                   }`}
                 />
-              </button>
+              </motion.button>
             ))}
             <span className="text-xs font-bold font-typewriter text-[#4a3422] mr-2">
               ({dossier.emotionalStability || 3} / 5)

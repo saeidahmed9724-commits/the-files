@@ -106,3 +106,100 @@
 .form-line {
   border-bottom: 1.5px dashed #a58e6c;
 }
+
+
+/* ===== ANIMATIONS & EFFECTS ===== */
+
+/* 1. Ambient dust particles */
+@keyframes float-dust {
+  0%, 100% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0.3; }
+  25% { transform: translateY(-20px) translateX(10px) rotate(90deg); opacity: 0.6; }
+  50% { transform: translateY(-40px) translateX(-5px) rotate(180deg); opacity: 0.4; }
+  75% { transform: translateY(-20px) translateX(15px) rotate(270deg); opacity: 0.5; }
+}
+
+/* 2. Stamp appearance animation */
+@keyframes stamp-appear {
+  0% { transform: rotate(-3deg) scale(3); opacity: 0; }
+  50% { transform: rotate(-3deg) scale(1.1); opacity: 0.7; }
+  100% { transform: rotate(-3deg) scale(1); opacity: 0.88; }
+}
+.stamp-animate {
+  animation: stamp-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 3. Paper texture shimmer */
+@keyframes paper-shimmer {
+  0% { background-position: 0 0, 12px 12px; }
+  100% { background-position: 24px 24px, 36px 36px; }
+}
+
+/* 4. Ink write effect */
+@keyframes ink-write {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.ink-write-effect {
+  animation: ink-write 0.8s ease-out forwards;
+}
+
+/* 5. Gentle glow pulse */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(217, 190, 140, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(217, 190, 140, 0.4), 0 0 40px rgba(217, 190, 140, 0.1); }
+}
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* 6. Folder lift shadow on hover */
+.folder-shadow-hover {
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+.folder-shadow-hover:hover {
+  box-shadow: 
+    0 20px 40px -10px rgba(0, 0, 0, 0.5),
+    0 15px 20px -10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+/* 7. Typewriter cursor blink */
+@keyframes cursor-blink {
+  0%, 100% { border-color: transparent; }
+  50% { border-color: #d9be8c; }
+}
+.typewriter-cursor {
+  border-right: 2px solid #d9be8c;
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* 8. Vintage scrollbar */
+.scrollbar-vintage::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-vintage::-webkit-scrollbar-track {
+  background: rgba(44, 29, 17, 0.3);
+  border-radius: 3px;
+}
+.scrollbar-vintage::-webkit-scrollbar-thumb {
+  background: rgba(139, 107, 69, 0.6);
+  border-radius: 3px;
+}
+.scrollbar-vintage::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 107, 69, 0.9);
+}
+
+/* 9. Subtle page turn shadow */
+@keyframes page-turn-shadow {
+  0% { box-shadow: -5px 0 15px rgba(0,0,0,0.3); }
+  50% { box-shadow: -15px 0 30px rgba(0,0,0,0.5); }
+  100% { box-shadow: -5px 0 15px rgba(0,0,0,0.3); }
+}
+
+/* 10. Smooth focus ring for inputs */
+.focus-vintage:focus {
+  outline: none;
+  border-color: #d9be8c;
+  box-shadow: 0 0 0 3px rgba(217, 190, 140, 0.15);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}

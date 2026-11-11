@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, ClipboardPaste, Check, Sparkles } from 'lucide-react';
 import { PersonDossier, PredictionEntry } from '../types/dossier';
 
@@ -23,8 +24,6 @@ export const PasteAIModal: React.FC<PasteAIModalProps> = ({
   const [targetSection, setTargetSection] = useState<'summary' | 'changes' | 'prediction'>('summary');
   const [scenarioInput, setScenarioInput] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
-
-  if (!isOpen) return null;
 
   const handleApply = () => {
     if (!content.trim()) return;
@@ -54,8 +53,21 @@ export const PasteAIModal: React.FC<PasteAIModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-xl w-full rounded-lg shadow-2xl relative p-6 my-6 text-right font-arabic-body">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 24 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 24 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-xl w-full rounded-lg shadow-2xl relative p-6 my-6 text-right font-arabic-body"
+          >
         {/* Header */}
         <div className="flex justify-between items-center pb-3 border-b-2 border-[#b5956f]">
           <button
@@ -159,10 +171,12 @@ export const PasteAIModal: React.FC<PasteAIModalProps> = ({
           >
             إلغاء
           </button>
-          <button
+          <motion.button
             type="button"
             onClick={handleApply}
             disabled={!content.trim()}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
             className="px-6 py-2.5 bg-[#8c1d18] hover:bg-[#731713] disabled:opacity-50 text-[#fbf7ee] font-bold rounded shadow-lg transition text-sm flex items-center gap-2"
           >
             {savedSuccess ? (
@@ -176,9 +190,11 @@ export const PasteAIModal: React.FC<PasteAIModalProps> = ({
                 <span>تطبيق وحفظ في الملف</span>
               </>
             )}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

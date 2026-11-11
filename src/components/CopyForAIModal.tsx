@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, Copy, Check, FileText, Sparkles } from 'lucide-react';
 import { PersonDossier } from '../types/dossier';
 import { formatDossierForAI } from '../utils/dossierLogic';
@@ -11,8 +12,6 @@ interface CopyForAIModalProps {
 
 export const CopyForAIModal: React.FC<CopyForAIModalProps> = ({ isOpen, onClose, dossier }) => {
   const [copied, setCopied] = useState(false);
-
-  if (!isOpen) return null;
 
   const formattedPrompt = formatDossierForAI(dossier);
 
@@ -27,8 +26,21 @@ export const CopyForAIModal: React.FC<CopyForAIModalProps> = ({ isOpen, onClose,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-2xl w-full rounded-lg shadow-2xl relative p-6 my-6 text-right font-arabic-body max-h-[90vh] flex flex-col">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 24 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 24 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="bg-[#fcf8f0] border-4 border-[#8c6b45] max-w-2xl w-full rounded-lg shadow-2xl relative p-6 my-6 text-right font-arabic-body max-h-[90vh] flex flex-col"
+          >
         {/* Header */}
         <div className="flex justify-between items-center pb-3 border-b-2 border-[#b5956f]">
           <button
@@ -70,9 +82,11 @@ export const CopyForAIModal: React.FC<CopyForAIModalProps> = ({ isOpen, onClose,
           >
             إغلاق
           </button>
-          <button
+          <motion.button
             type="button"
             onClick={handleCopy}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
             className="px-6 py-2.5 bg-[#8c1d18] hover:bg-[#731713] text-[#fbf7ee] font-bold rounded shadow-lg transition text-sm flex items-center gap-2"
           >
             {copied ? (
@@ -86,9 +100,11 @@ export const CopyForAIModal: React.FC<CopyForAIModalProps> = ({ isOpen, onClose,
                 <span>نسخ النص كاملاً للحافظة</span>
               </>
             )}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

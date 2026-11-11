@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { motion } from 'motion/react';
 import { BatteryCharging, TrendingUp, TrendingDown, Minus, Clock } from 'lucide-react';
 import { PersonDossier } from '../types/dossier';
 import { BatteryLevel, BatteryTrend, calculateSocialBattery, ENERGY_VALUE, BATTERY_MIN_RATED } from '../utils/dossierLogic';
@@ -58,10 +59,21 @@ export const SocialBatteryMeter: React.FC<Props> = ({ dossier, onGoToTimeline })
         <div className="flex items-center gap-1 shrink-0" dir="ltr" aria-hidden="true">
           <div className="flex gap-1 p-1.5 border-2 border-[#5c4028] rounded-md bg-[#eae0c8]">
             {Array.from({ length: 10 }).map((_, i) => (
-              <div
+              <motion.div
                 key={i}
-                className="w-3 h-9 rounded-sm transition-colors duration-500"
-                style={{ background: i < filled ? lvl.color : '#d6c4a0' }}
+                initial={{ scaleY: 0.2, opacity: 0.4 }}
+                animate={{
+                  scaleY: i < filled ? 1 : 0.85,
+                  opacity: 1,
+                  background: i < filled ? lvl.color : '#d6c4a0',
+                }}
+                transition={{
+                  delay: i * 0.04,
+                  type: 'spring',
+                  stiffness: 350,
+                  damping: 20,
+                }}
+                className="w-3 h-9 rounded-sm origin-bottom"
               />
             ))}
           </div>
@@ -97,11 +109,15 @@ export const SocialBatteryMeter: React.FC<Props> = ({ dossier, onGoToTimeline })
         <div className="mt-3 flex items-center gap-2">
           <span className="text-[10px] font-typewriter text-[#7a5f45] shrink-0">آخر المواقف ←</span>
           <div className="flex gap-1 flex-wrap" dir="ltr">
-            {recentDots.map((e) => (
-              <span
+            {recentDots.map((e, idx) => (
+              <motion.span
                 key={e.id}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                whileHover={{ scale: 1.4 }}
+                transition={{ delay: 0.1 + idx * 0.03, type: 'spring', stiffness: 400, damping: 18 }}
                 title={`${e.date}: ${e.text.slice(0, 60)}`}
-                className="w-3 h-3 rounded-full border border-black/20"
+                className="w-3 h-3 rounded-full border border-black/20 cursor-help"
                 style={{ background: DOT_COLOR[e.energy!] }}
               />
             ))}

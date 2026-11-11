@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { PersonDossier } from './types/dossier';
@@ -262,6 +263,8 @@ export default function App() {
   };
 
   // ---- Render ----
+  const currentDossier = dossiers.find((d) => d.id === selectedDossierId);
+
   if (session === undefined) {
     return <Splash text="جاري التحقق من الجلسة..." />;
   }
@@ -289,40 +292,51 @@ export default function App() {
     );
   }
 
-  const currentDossier = dossiers.find((d) => d.id === selectedDossierId);
-
   const statusBar = <SaveIndicator status={saveStatus} error={saveError} onRetry={flushSave} />;
-
-  if (currentDossier) {
-    return (
-      <>
-        <FolderView
-          key={currentDossier.id}
-          dossier={currentDossier}
-          onClose={handleCloseDossier}
-          onUpdateDossier={handleUpdateDossier}
-          onDeleteDossier={handleDeleteDossier}
-          linkable={dossiers.filter((d) => d.id !== currentDossier.id).map((d) => ({ id: d.id, name: d.name }))}
-          onOpenLinked={setSelectedDossierId}
-        />
-        {statusBar}
-      </>
-    );
-  }
 
   return (
     <>
-      <DeskView
-        dossiers={dossiers}
-        onOpenDossier={handleOpenDossier}
-        onAddDossier={handleAddDossier}
-        onExportData={handleExportData}
-        onImportData={handleImportData}
-        onLock={handleLock}
-        onLoadSamples={handleLoadSamples}
-        legacyCount={legacyCount}
-        onImportFromBrowser={handleImportFromBrowser}
-      />
+      <AnimatePresence mode="wait">
+        {currentDossier ? (
+          <motion.div
+            key={`folder-${currentDossier.id}`}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+          >
+            <FolderView
+              key={currentDossier.id}
+              dossier={currentDossier}
+              onClose={handleCloseDossier}
+              onUpdateDossier={handleUpdateDossier}
+              onDeleteDossier={handleDeleteDossier}
+              linkable={dossiers.filter((d) => d.id !== currentDossier.id).map((d) => ({ id: d.id, name: d.name }))}
+              onOpenLinked={setSelectedDossierId}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="desk"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+          >
+            <DeskView
+              dossiers={dossiers}
+              onOpenDossier={handleOpenDossier}
+              onAddDossier={handleAddDossier}
+              onExportData={handleExportData}
+              onImportData={handleImportData}
+              onLock={handleLock}
+              onLoadSamples={handleLoadSamples}
+              legacyCount={legacyCount}
+              onImportFromBrowser={handleImportFromBrowser}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {statusBar}
     </>
   );
@@ -334,28 +348,51 @@ const Splash: React.FC<{
   action?: { label: string; onClick: () => void };
   secondary?: { label: string; onClick: () => void };
 }> = ({ text, isError, action, secondary }) => (
-  <div className="min-h-screen bg-desk-wood flex flex-col items-center justify-center gap-4 p-6 text-center font-arabic-body">
-    {!isError && <Loader2 className="w-8 h-8 text-[#d9be8c] animate-spin" />}
-    <p className={`text-sm ${isError ? 'text-rose-300' : 'text-[#d9be8c]'}`}>{text}</p>
+  <motion.div
+    className="min-h-screen bg-desk-wood flex flex-col items-center justify-center gap-4 p-6 text-center font-arabic-body"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.5 }}
+  >
+    {!isError && (
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+      >
+        <Loader2 className="w-8 h-8 text-[#d9be8c]" />
+      </motion.div>
+    )}
+    <motion.p
+      className={`text-sm ${isError ? 'text-rose-300' : 'text-[#d9be8c]'}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+    >
+      {text}
+    </motion.p>
     <div className="flex gap-2">
       {action && (
-        <button
+        <motion.button
           onClick={action.onClick}
           className="px-4 py-2 bg-[#8c1d18] text-[#fbf7ee] text-xs font-bold rounded-lg border border-[#c43d36]"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           {action.label}
-        </button>
+        </motion.button>
       )}
       {secondary && (
-        <button
+        <motion.button
           onClick={secondary.onClick}
           className="px-4 py-2 bg-[#2a1d14] text-[#d9be8c] text-xs font-bold rounded-lg border border-[#5c4028]"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           {secondary.label}
-        </button>
+        </motion.button>
       )}
     </div>
-  </div>
+  </motion.div>
 );
 
 const SaveIndicator: React.FC<{ status: SaveStatus; error: string; onRetry: () => void }> = ({
@@ -363,26 +400,33 @@ const SaveIndicator: React.FC<{ status: SaveStatus; error: string; onRetry: () =
   error,
   onRetry,
 }) => {
-  if (status === 'idle') return null;
   const styles: Record<Exclude<SaveStatus, 'idle'>, string> = {
     saving: 'bg-[#2a1d14] text-[#d9be8c] border-[#5c4028]',
     saved: 'bg-emerald-950 text-emerald-300 border-emerald-800',
     error: 'bg-rose-950 text-rose-200 border-rose-700',
   };
   return (
-    <div
-      className={`fixed bottom-3 left-3 z-50 px-3 py-1.5 rounded-lg border text-[11px] font-arabic-body shadow-lg flex items-center gap-2 max-w-[80vw] ${styles[status]}`}
-    >
-      {status === 'saving' && <span>جاري الحفظ...</span>}
-      {status === 'saved' && <span>✓ تم الحفظ</span>}
-      {status === 'error' && (
-        <>
-          <span className="truncate">فشل الحفظ{error ? `: ${error}` : ''}</span>
-          <button onClick={onRetry} className="underline shrink-0">
-            إعادة
-          </button>
-        </>
+    <AnimatePresence>
+      {status !== 'idle' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.9 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          className={`fixed bottom-3 left-3 z-50 px-3 py-1.5 rounded-lg border text-[11px] font-arabic-body shadow-lg flex items-center gap-2 max-w-[80vw] ${styles[status]}`}
+        >
+          {status === 'saving' && <span>جاري الحفظ...</span>}
+          {status === 'saved' && <span>✓ تم الحفظ</span>}
+          {status === 'error' && (
+            <>
+              <span className="truncate">فشل الحفظ{error ? `: ${error}` : ''}</span>
+              <button onClick={onRetry} className="underline shrink-0">
+                إعادة
+              </button>
+            </>
+          )}
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   );
 };
