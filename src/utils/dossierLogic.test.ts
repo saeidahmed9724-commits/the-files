@@ -325,3 +325,100 @@ test('applyCapture: life, knowledge and circle are added, deduped, and circle na
   assert.equal(counts.skippedDuplicates, 2);
   assert.equal(counts.circle, 1);
 });
+
+import { applyImport, isBlankValue, ImportSelection } from './importApply';
+
+const importBase = (): PersonDossier =>
+  ({
+    id: 'p1',
+    name: 'خالد',
+    photoUrl: '',
+    relationship: 'صديق',
+    occupation: 'غير محدد',
+    age: 'غير محدد',
+    knownSince: 'حديثاً',
+    emotionalStability: 3,
+    personalitySummary: '',
+    createdAt: '',
+    updatedAt: '',
+    mind: {
+      howTheyThink: '',
+      howTheyThinkConfidence: 'medium',
+      decisionMaking: 'بيفكر كتير',
+      decisionMakingConfidence: 'high',
+      handlingPressure: '',
+      handlingPressureConfidence: 'medium',
+      emotionalStabilityDesc: '',
+      emotionalStabilityConfidence: 'medium',
+      coreValues: '',
+      coreValuesConfidence: 'medium',
+      communicationStyle: '',
+      communicationStyleConfidence: 'medium',
+    },
+    triggers: [{ id: 't0', text: 'التقليل منه' }],
+    comforts: [],
+    timeline: [],
+    changesOverTime: { analysisText: '' },
+    predictions: [],
+  }) as PersonDossier;
+
+const emptySel = (): ImportSelection => ({
+  profile: {},
+  mind: {},
+  entries: [],
+  changes: [],
+  triggers: [],
+  comforts: [],
+  lexicon: [],
+  life: [],
+  knowledge: [],
+  circle: [],
+});
+
+test('isBlankValue treats the new-file placeholders as empty', () => {
+  assert.equal(isBlankValue('غير محدد'), true);
+  assert.equal(isBlankValue('  '), true);
+  assert.equal(isBlankValue('22'), false);
+});
+
+test('applyImport fills the whole profile, appends to existing mind text and skips duplicates', () => {
+  const d = importBase();
+  const sel = emptySel();
+  sel.profile = { occupation: 'لاعب كورة', emotionalStability: 2, personalitySummary: 'اجتماعي وعنيد' };
+  sel.mind = {
+    howTheyThink: { text: 'بيفكر بمصلحته', confidence: 'low' },
+    decisionMaking: { text: 'بيعاند لو اتعارض', confidence: 'medium' },
+  };
+  sel.triggers = [
+    { text: 'التقليل منه', severity: 'high' },
+    { text: 'التجاهل', severity: 'moderate' },
+  ];
+  sel.circle = [{ name: 'أمه', relation: 'أم', influence: 'high' }];
+  sel.entries = [{ text: 'بيكره الكذب وبيكذب', type: 'impression', source: 'inferred' }];
+
+  const { patch, counts } = applyImport(d, sel, '2026-11-12', 1000, []);
+
+  assert.equal(patch.occupation, 'لاعب كورة');
+  assert.equal(patch.emotionalStability, 2);
+  assert.equal(patch.mind?.howTheyThink, 'بيفكر بمصلحته');
+  assert.equal(patch.mind?.howTheyThinkConfidence, 'low');
+  // existing text is kept, new text goes under it, confidence untouched
+  assert.equal(patch.mind?.decisionMaking, 'بيفكر كتير\nبيعاند لو اتعارض');
+  assert.equal(patch.mind?.decisionMakingConfidence, 'high');
+  // duplicate trigger skipped
+  assert.equal(patch.triggers?.length, 2);
+  assert.equal(counts.skippedDuplicates, 1);
+  assert.equal(patch.circle?.[0].name, 'أمه');
+  assert.equal(patch.timeline?.[0].source, 'inferred');
+  assert.equal(patch.timeline?.[0].fromVoice, undefined);
+  assert.ok(patch.timeline?.[0].tags?.includes('مستورد'));
+  // untouched fields are not in the patch
+  assert.equal('name' in patch, false);
+  assert.equal('age' in patch, false);
+});
+
+test('applyImport with an empty selection changes nothing', () => {
+  const { patch, counts } = applyImport(importBase(), emptySel(), '2026-11-12');
+  assert.deepEqual(patch, {});
+  assert.equal(counts.profileFields + counts.mindFields, 0);
+});
