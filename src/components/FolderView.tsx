@@ -6,6 +6,7 @@ import {
   X,
   Copy,
   ClipboardPaste,
+  Wand2,
   Trash2,
   BookOpen,
   ChevronRight,
@@ -33,6 +34,7 @@ import { Page7Simulator } from './pages/Page7Simulator';
 import { Page8Life } from './pages/Page8Life';
 import { CopyForAIModal } from './CopyForAIModal';
 import { PasteAIModal } from './PasteAIModal';
+import { ImportProfileModal } from './ImportProfileModal';
 
 interface FolderViewProps {
   dossier: PersonDossier;
@@ -55,6 +57,9 @@ export const FolderView: React.FC<FolderViewProps> = ({
   const [activePage, setActivePage] = useState<number>(1);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  // Pages keep a local copy of the dossier; bumping this remounts the open page after an import.
+  const [importRev, setImportRev] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // Track direction for AnimatePresence page transitions
   const directionRef = useRef<'next' | 'prev'>('next');
@@ -155,6 +160,17 @@ export const FolderView: React.FC<FolderViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setShowImportModal(true)}
+            title="الصق نص طويل والذكاء الاصطناعي يملّي الملف كله"
+            className="px-3 py-1.5 bg-[#8c1d18] hover:bg-[#a52620] text-[#fcf8f0] text-xs font-bold rounded-lg border border-[#d9be8c]/60 transition flex items-center gap-1.5 shadow"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">املأ الملف من نص</span>
+            <span className="sm:hidden">املأ</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowCopyModal(true)}
             title="نسخ الملف بالكامل كبرومبت للذكاء الاصطناعي"
             className="px-3 py-1.5 bg-[#2d2016] hover:bg-[#3d2b1e] text-[#e6d3b3] hover:text-white text-xs font-bold rounded-lg border border-[#735436] transition flex items-center gap-1.5 shadow"
@@ -244,7 +260,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
           <div className="relative z-10 overflow-hidden">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
-                key={activePage}
+                key={`${activePage}-${importRev}`}
                 initial={{ opacity: 0, x: direction === 'next' ? 50 : -50, scale: 0.98 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: direction === 'next' ? -50 : 50, scale: 0.98 }}
@@ -325,6 +341,18 @@ export const FolderView: React.FC<FolderViewProps> = ({
         isOpen={showCopyModal}
         onClose={() => setShowCopyModal(false)}
         dossier={dossier}
+      />
+
+      {/* Import: fill the whole profile from long text */}
+      <ImportProfileModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        dossier={dossier}
+        linkable={linkable}
+        onApply={(patch) => {
+          onUpdateDossier(patch);
+          setImportRev((n) => n + 1);
+        }}
       />
 
       {/* Paste AI Reply Modal */}
