@@ -22,6 +22,7 @@ import {
   Share2,
   MessagesSquare,
   Users,
+  Search,
 } from 'lucide-react';
 import { PersonDossier, PredictionEntry } from '../types/dossier';
 import { Page1Character } from './pages/Page1Character';
@@ -32,6 +33,7 @@ import { Page5Changes } from './pages/Page5Changes';
 import { Page6Predictions } from './pages/Page6Predictions';
 import { Page7Simulator } from './pages/Page7Simulator';
 import { Page8Life } from './pages/Page8Life';
+import { Page9Memory } from './pages/Page9Memory';
 import { CopyForAIModal } from './CopyForAIModal';
 import { PasteAIModal } from './PasteAIModal';
 import { ImportProfileModal } from './ImportProfileModal';
@@ -73,16 +75,17 @@ export const FolderView: React.FC<FolderViewProps> = ({
     { num: 6, id: 'pred', title: 'التوقعات والفرضيات', icon: Target, code: 'PRED-06' },
     { num: 7, id: 'sim', title: 'محاكي المواجهات', icon: MessagesSquare, code: 'SIM-07' },
     { num: 8, id: 'life', title: 'حياته ودايرته', icon: Users, code: 'LIFE-08' },
+    { num: 9, id: 'mem', title: 'الذاكرة', icon: Search, code: 'MEM-09' },
   ];
 
   const goToPage = (pageNumber: number) => {
-    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 8) return;
+    if (pageNumber === activePage || pageNumber < 1 || pageNumber > 9) return;
     directionRef.current = pageNumber > activePage ? 'next' : 'prev';
     setActivePage(pageNumber);
   };
 
   const handleNextPage = () => {
-    if (activePage < 8) goToPage(activePage + 1);
+    if (activePage < 9) goToPage(activePage + 1);
   };
 
   const handlePrevPage = () => {
@@ -108,6 +111,8 @@ export const FolderView: React.FC<FolderViewProps> = ({
         return <Page7Simulator dossier={dossier} onUpdateDossier={onUpdateDossier} />;
       case 8:
         return <Page8Life dossier={dossier} onUpdateDossier={onUpdateDossier} linkable={linkable} onOpenLinked={onOpenLinked} />;
+      case 9:
+        return <Page9Memory dossier={dossier} />;
       default:
         return null;
     }
@@ -288,7 +293,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
 
             {/* 6) Page Indicator Dots — active dot scales up with spring */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                 <motion.button
                   key={num}
                   type="button"
@@ -324,7 +329,7 @@ export const FolderView: React.FC<FolderViewProps> = ({
             <motion.button
               type="button"
               onClick={handleNextPage}
-              disabled={activePage === 8}
+              disabled={activePage === 9}
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.05 }}
               className="px-4 py-2 bg-[#ecdcc4] hover:bg-[#f5e9d6] disabled:opacity-30 disabled:pointer-events-none text-[#2d1c10] font-bold rounded-lg border border-[#a68660] transition flex items-center gap-2 text-xs sm:text-sm shadow-sm"

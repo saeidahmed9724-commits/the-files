@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 // Vercel serverless function.
-// Handles: POST /api/gemini/<summary|changes|predict|learn|approach|simulate|debrief|extract>
+// Handles: POST /api/gemini/<summary|changes|predict|learn|approach|simulate|debrief|extract|import|ask>
 // Same URLs the front end already calls, so no client changes are needed.
 // Requires a logged-in Supabase user (Authorization: Bearer <access_token>).
 // Env vars (Vercel > Project > Settings > Environment Variables):
@@ -502,6 +502,66 @@ function parseJsonLoose(text: string): any {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ask: Contextual Memory. Answers a free question from the person's recorded notes/situations.
+// The client sends the memory items (each with a short code) and the model cites the codes.
+// ---------------------------------------------------------------------------
+const ASK_MAX_ITEMS = 160;
+
+const ASK_SYSTEM = `إنت صاحب مقرّب وفاهم في طبائع الناس، بتجاوب المستخدم عن شخص بيعرفه من الذاكرة المسجلة في ملفه بس.
+اتكلم بالعامية المصرية الطبيعية. ممنوع الفصحى والكلام الرسمي.
+
+القواعد:
+1. جاوب من الذاكرة المكتوبة قدامك بس. متألفش مواقف ولا تفاصيل مش موجودة، ومتستخدمش معلومات عامة عن الناس كأنها دليل.
+2. كل معلومة تقولها لازم تتسند بكود المصدر بين أقواس مربعة زي [T3] أو [T3, P1]. استخدم الأكواد الموجودة فقط ومتخترعش أكواد.
+3. ابدأ بالإجابة المباشرة في جملة أو اتنين، وبعدها المواقف أو الأنماط المرتبطة مع تواريخها لو مهمة.
+4. لو المواقف القديمة بتتعارض مع الجديدة، قول كده وخلي الأحدث هو الأهم.
+5. لو الذاكرة مش كفاية تجاوب السؤال، قول ده بوضوح، وقول إيه النوع اللي لو اتسجل كان هيساعد. ماتجاوبش بالتخمين.
+6. الملاحظات دي رأي المستخدم مش حقايق، فقول "غالبًا" أو "على الأرجح" بدل ما تجزم.
+7. طول الإجابة من 70 لـ 150 كلمة. من غير عناوين ولا رموز تنسيق زي # أو ** أو ---. سطور عادية وترقيم بسيط لو محتاج.`;
+
+interface AskItem {
+  tag: string;
+  date: string;
+  meta: string;
+  text: string;
+}
+
+function cleanMemory(raw: any): AskItem[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: AskItem[] = [];
+  for (const it of raw.slice(0, ASK_MAX_ITEMS)) {
+    const tag = typeof it?.tag === 'string' ? it.tag.trim() : '';
+    const text = typeof it?.text === 'string' ? it.text.trim() : '';
+    if (!/^[A-Z]\d{1,3}$/.test(tag) || !text || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push({
+      tag,
+      date: typeof it.date === 'string' ? it.date.slice(0, 10) : '',
+      meta: typeof it.meta === 'string' ? it.meta.slice(0, 80) : '',
+      text: text.slice(0, 700),
+    });
+  }
+  return out;
+}
+
+function buildAskPrompt(d: any, question: string, memory: AskItem[]): string {
+  const name = String(d?.name || '').slice(0, 80);
+  const rel = String(d?.relationship || 'غير محدد').slice(0, 60);
+  const job = d?.occupation ? ` - ${String(d.occupation).slice(0, 60)}` : '';
+  const lines = memory
+    .map((m) => `[${m.tag}]${m.date ? ` ${m.date}` : ''}${m.meta ? ` (${m.meta})` : ''}: ${m.text}`)
+    .join('\n');
+  return `الشخص: ${name} (${rel}${job})
+سؤال المستخدم: "${question}"
+
+الذاكرة (كل اللي المستخدم سجّله عنه، وكل معلومة ليها كود):
+${lines}
+
+جاوب على السؤال من الذاكرة دي بس، واذكر كود المصدر بعد كل معلومة.`;
+}
+
 // Vercel's request body limit is ~4.5MB; base64 audio must stay below it.
 const MAX_AUDIO_BASE64 = 4_000_000;
 const AUDIO_MIME = /^audio\/(wav|x-wav|wave|mp3|mpeg|aac|ogg|flac|aiff|webm|mp4|x-m4a)(;.*)?$/i;
@@ -528,7 +588,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const action = String(req.query?.action || '');
-  const { dossier, scenario, predictedReaction, actualOutcome, history, topic, plan, text, audio } = req.body || {};
+  const { dossier, scenario, predictedReaction, actualOutcome, history, topic, plan, text, audio, question, memory } = req.body || {};
 
   if (!dossier) {
     return res.status(400).json({ error: 'بيانات الملف غير متوفرة' });
@@ -585,6 +645,16 @@ export default async function handler(req: any, res: any) {
     }
     importTruncated = raw.length > MAX_IMPORT_CHARS;
     prompt = buildImportPrompt(dossier, raw.slice(0, MAX_IMPORT_CHARS));
+  } else if (action === 'ask') {
+    const q = typeof question === 'string' ? question.trim().slice(0, 600) : '';
+    if (q.length < 3) {
+      return res.status(400).json({ error: 'اكتب سؤالك الأول' });
+    }
+    const mem = cleanMemory(memory);
+    if (mem.length === 0) {
+      return res.status(400).json({ error: 'مفيش معلومات مسجلة في الملف لسه. سجّل مواقف وملاحظات الأول.' });
+    }
+    prompt = buildAskPrompt(dossier, q, mem);
   } else {
     return res.status(404).json({ error: 'Unknown action' });
   }
@@ -621,7 +691,7 @@ export default async function handler(req: any, res: any) {
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
-        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : SYSTEM_PROMPT },
+        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : action === 'ask' ? ASK_SYSTEM : SYSTEM_PROMPT },
       });
       if (response.text) return res.status(200).json({ result: response.text, model });
       lastError = new Error('رد فارغ من النموذج');
