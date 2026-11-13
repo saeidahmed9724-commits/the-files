@@ -17,7 +17,9 @@ export type MemoryKind =
   | 'life'
   | 'knowledge'
   | 'circle'
-  | 'change';
+  | 'change'
+  | 'journal'
+  | 'goal';
 
 export interface MemoryItem {
   tag: string; // code the AI cites, e.g. "T3"
@@ -38,6 +40,8 @@ export const KIND_LABEL: Record<MemoryKind, string> = {
   knowledge: 'بيعرف عنك',
   circle: 'دايرته',
   change: 'تغيّر سجلته',
+  journal: 'يومياتي',
+  goal: 'هدف',
 };
 
 const PREFIX: Record<MemoryKind, string> = {
@@ -51,6 +55,8 @@ const PREFIX: Record<MemoryKind, string> = {
   knowledge: 'K',
   circle: 'R',
   change: 'G',
+  journal: 'J',
+  goal: 'H',
 };
 
 const NOTE_TYPE_AR: Record<string, string> = {
@@ -168,6 +174,19 @@ export function buildMemoryCorpus(d: PersonDossier): MemoryItem[] {
     });
   }
   for (const g of d.changesOverTime?.changeLog || []) push('change', { date: g.date, text: clip(g.text, 400) });
+
+  // The user's own file: diary entries (oldest first) and goals.
+  const diary = (d.journal || [])
+    .filter((j) => j && typeof j.date === 'string')
+    .sort((a, b) => a.date.localeCompare(b.date));
+  for (const j of diary) {
+    const meta = `مزاج ${j.mood}/5، طاقة ${j.energy}/5${j.tags?.length ? `، ${j.tags.map((t) => '#' + t).join(' ')}` : ''}`;
+    push('journal', { date: j.date, meta, text: clip(j.text || j.tags?.join(' ') || '', 500) });
+  }
+  const GOAL_AR: Record<string, string> = { active: 'شغّال', done: 'خلص', paused: 'موقوف' };
+  for (const g of d.goals || []) {
+    push('goal', { date: g.createdAt, meta: `${GOAL_AR[g.status] || ''}${g.targetDate ? `، الموعد ${g.targetDate}` : ''}`, text: clip(g.text, 250) });
+  }
 
   return items;
 }

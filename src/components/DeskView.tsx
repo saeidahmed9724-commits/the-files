@@ -17,6 +17,8 @@ import {
   Sparkles,
   Shield,
   Clock,
+  UserRound,
+  Star,
 } from 'lucide-react';
 import { PersonDossier } from '../types/dossier';
 import { searchDossiers } from '../utils/dossierLogic';
@@ -32,6 +34,8 @@ interface DeskViewProps {
   onImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onLock: () => void;
   onLoadSamples: () => void;
+  /** Creates (or opens) the user's own file. */
+  onCreateSelf: () => void;
   legacyCount: number;
   onImportFromBrowser: () => void;
 }
@@ -44,6 +48,7 @@ export const DeskView: React.FC<DeskViewProps> = ({
   onImportData,
   onLock,
   onLoadSamples,
+  onCreateSelf,
   legacyCount,
   onImportFromBrowser,
 }) => {
@@ -246,6 +251,20 @@ export const DeskView: React.FC<DeskViewProps> = ({
 
       {/* Desk Surface: Scattered Manila Folders */}
       <main className="relative z-10 max-w-7xl mx-auto pb-16">
+        {!dossiers.some((d) => d.isSelf) && !searchQuery && (
+          <button
+            type="button"
+            onClick={onCreateSelf}
+            className="w-full mb-6 flex items-center gap-3 text-right bg-gradient-to-l from-[#3a2a12] to-[#2a1d14] hover:from-[#4a3517] border-2 border-dashed border-[#d9be8c]/70 hover:border-[#d9be8c] rounded-xl px-5 py-4 transition shadow-lg"
+          >
+            <UserRound className="w-8 h-8 text-[#d9be8c] shrink-0" />
+            <span className="flex-1">
+              <span className="block text-base font-bold text-[#f3e3c3]">ابدأ ملفك الشخصي</span>
+              <span className="block text-xs text-[#cbb184]">ملف ليك إنت: بتحكي فيه باستمرار، وفيه يوميات وأهداف وصفحة بتوريك الناس بتشحنك ولا بتتعبك.</span>
+            </span>
+            <span className="text-[#d9be8c] text-sm font-bold">+ ابدأ</span>
+          </button>
+        )}
         {filteredDossiers.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -282,6 +301,7 @@ export const DeskView: React.FC<DeskViewProps> = ({
               {filteredDossiers.map((dossier, idx) => {
                 const rot = rotations[idx % rotations.length];
                 const isOpening = openingFolderId === dossier.id;
+                const isSelf = !!dossier.isSelf;
 
                 return (
                   <motion.div
@@ -305,7 +325,8 @@ export const DeskView: React.FC<DeskViewProps> = ({
                   >
                     {/* Manila Folder Tab sticking out on top right */}
                     <div className="flex justify-between items-end mr-6 -mb-0.5 relative z-0">
-                      <div className="bg-[#c5a76e] group-hover:bg-[#d6ba82] border-t-2 border-r-2 border-l-2 border-[#8c6b45] px-4 py-1.5 rounded-t-lg shadow-sm transition">
+                      <div className={`${isSelf ? 'bg-[#e0b34a] group-hover:bg-[#ecc261] border-[#8a5f12]' : 'bg-[#c5a76e] group-hover:bg-[#d6ba82] border-[#8c6b45]'} border-t-2 border-r-2 border-l-2 px-4 py-1.5 rounded-t-lg shadow-sm transition flex items-center gap-1.5`}>
+                        {isSelf && <Star className="w-3 h-3 text-[#6b4708] fill-[#6b4708]" />}
                         <span className="font-typewriter text-xs font-bold text-[#1a120a] uppercase tracking-wide">
                           {dossier.name}
                         </span>
@@ -317,7 +338,7 @@ export const DeskView: React.FC<DeskViewProps> = ({
                     </div>
 
                     {/* Manila Folder Closed Cover Card */}
-                    <div className="bg-[#dfc89d] group-hover:bg-[#e4ceaa] border-4 border-[#8c6b45] rounded-xl p-5 shadow-2xl relative folder-shadow folder-shadow-hover transition min-h-[300px] flex flex-col justify-between overflow-hidden">
+                    <div className={`${isSelf ? 'bg-[#ead9a8] group-hover:bg-[#efe0b4] border-[#b8860b] ring-2 ring-[#e0b34a]/60' : 'bg-[#dfc89d] group-hover:bg-[#e4ceaa] border-[#8c6b45]'} border-4 rounded-xl p-5 shadow-2xl relative folder-shadow folder-shadow-hover transition min-h-[300px] flex flex-col justify-between overflow-hidden`}>
                       {/* Folder spine crease line */}
                       <div className="absolute right-0 top-0 bottom-0 w-3 bg-gradient-to-l from-[#a88a5b]/40 to-transparent pointer-events-none" />
 

@@ -423,5 +423,27 @@ export function formatDossierForAI(dossier: PersonDossier): string {
     });
   }
 
+  if (dossier.isSelf) {
+    const goalLabel = { active: 'شغّال', done: 'خلص', paused: 'موقوف' } as const;
+    if (dossier.goals && dossier.goals.length > 0) {
+      lines.push(`--- أهدافي ---`);
+      dossier.goals.forEach((g, i) => {
+        lines.push(`${i + 1}. (${goalLabel[g.status]}) ${g.text}${g.targetDate ? ` | الموعد: ${g.targetDate}` : ''}`);
+      });
+      lines.push(``);
+    }
+    if (dossier.journal && dossier.journal.length > 0) {
+      lines.push(`--- يومياتي (الأحدث أولاً، المزاج والطاقة من 1 إلى 5) ---`);
+      [...dossier.journal]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 60)
+        .forEach((j) => {
+          lines.push(`[${j.date}] مزاج ${j.mood} | طاقة ${j.energy}${j.tags?.length ? ` | ${j.tags.map((t) => '#' + t).join(' ')}` : ''}${j.text ? `: ${j.text}` : ''}`);
+        });
+      lines.push(``);
+    }
+    lines.push(`ملحوظة للذكاء الاصطناعي: هذا الملف هو ملفي الشخصي أنا، خاطبني مباشرة بصيغة المخاطب.`);
+  }
+
   return lines.join('\n');
 }
