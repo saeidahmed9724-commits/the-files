@@ -9,6 +9,7 @@ import { DeskView } from './components/DeskView';
 import { FolderView } from './components/FolderView';
 import { supabase } from './lib/supabase';
 import { deleteDossierPhoto } from './lib/photos';
+import { createSelfDossier, findSelf, pinSelfFirst } from './utils/selfLogic';
 
 const LEGACY_STORAGE_KEY = 'the_files_dossiers_v1';
 const SAVE_DEBOUNCE_MS = 800;
@@ -28,7 +29,8 @@ function readLegacyDossiers(): PersonDossier[] {
 }
 
 function sortDossiers(list: PersonDossier[]): PersonDossier[] {
-  return [...list].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const byNewest = [...list].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return pinSelfFirst(byNewest); // the user's own file always comes first
 }
 
 export default function App() {
@@ -166,8 +168,18 @@ export default function App() {
   };
 
   const handleAddDossier = (newDossier: PersonDossier) => {
-    setDossiers((prev) => [newDossier, ...prev]);
+    setDossiers((prev) => sortDossiers([newDossier, ...prev]));
     setSelectedDossierId(newDossier.id);
+  };
+
+  /** Creates the user's own file (only one is allowed) and opens it. */
+  const handleCreateSelf = () => {
+    const existing = findSelf(dossiersRef.current);
+    if (existing) {
+      setSelectedDossierId(existing.id);
+      return;
+    }
+    handleAddDossier(createSelfDossier());
   };
 
   const handleDeleteDossier = async (id: string) => {
@@ -313,6 +325,7 @@ export default function App() {
               onDeleteDossier={handleDeleteDossier}
               linkable={dossiers.filter((d) => d.id !== currentDossier.id).map((d) => ({ id: d.id, name: d.name }))}
               onOpenLinked={setSelectedDossierId}
+              others={currentDossier.isSelf ? dossiers.filter((d) => d.id !== currentDossier.id) : undefined}
             />
           </motion.div>
         ) : (
@@ -331,6 +344,7 @@ export default function App() {
               onImportData={handleImportData}
               onLock={handleLock}
               onLoadSamples={handleLoadSamples}
+              onCreateSelf={handleCreateSelf}
               legacyCount={legacyCount}
               onImportFromBrowser={handleImportFromBrowser}
             />
