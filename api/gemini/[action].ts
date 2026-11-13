@@ -490,6 +490,66 @@ function sanitizeImport(raw: any, truncated: boolean): any {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Self file: the user's own dossier (diary + goals)
+// ---------------------------------------------------------------------------
+
+const SELF_NOTE = `ملحوظة مهمة: الملف ده هو ملف المستخدم نفسه مش شخص تاني. أي ضمير غايب (هو، المستخدم، اسم الملف) معناه المستخدم نفسه، فكلمه مباشرة بصيغة (إنت) وبالعامية المصرية. المكتوب فيه رأيه وملاحظاته عن نفسه مش حقايق.
+
+`;
+
+const SELF_SYSTEM = `إنت صاحب مقرّب وصريح وهادي، بتساعد المستخدم يفهم نفسه من يومياته وملف نفسه.
+القواعد:
+1. اتكلم معاه بصيغة المخاطب (إنت) وبالعامية المصرية، زي صاحب بيكلم صاحبه.
+2. ابني كلامك على المسجل بس. متألفش أحداث ومتشخّصش حالة نفسية أو طبية.
+3. دي ملاحظاته عن نفسه مش حقايق، فقول "الظاهر" و"غالبًا" لما تستنتج، ولو الداتا قليلة قول كده بصراحة.
+4. من غير عناوين markdown ولا رموز تنسيق.
+5. لو اليوميات فيها حزن عميق أو إحساس إنه مش قادر يكمل أو أي كلام عن إيذاء النفس، سيب التحليل واتكلم معاه بحنية وشجّعه يكلم حد قريب منه أو متخصص النهارده.`;
+
+const SELF_MOOD_AR = ['', 'وحش', 'مش ولا بد', 'عادي', 'كويس', 'ممتاز'];
+const SELF_ENERGY_AR = ['', 'فاضي', 'تعبان', 'متوسط', 'نشيط', 'مليان'];
+const SELF_GOAL_AR: Record<string, string> = { active: 'شغّال', done: 'خلص', paused: 'موقوف' };
+
+function cleanJournal(raw: any): { date: string; mood: number; energy: number; text: string; tags: string[] }[] {
+  if (!Array.isArray(raw)) return [];
+  const clamp = (n: any) => Math.min(5, Math.max(1, Math.round(Number(n) || 3)));
+  return raw
+    .filter((j: any) => j && typeof j.date === 'string')
+    .map((j: any) => ({
+      date: String(j.date).slice(0, 10),
+      mood: clamp(j.mood),
+      energy: clamp(j.energy),
+      text: typeof j.text === 'string' ? j.text.trim().slice(0, 400) : '',
+      tags: Array.isArray(j.tags) ? j.tags.slice(0, 6).map((t: any) => String(t).slice(0, 24)) : [],
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-40);
+}
+
+function buildSelfReviewPrompt(d: any, journal: ReturnType<typeof cleanJournal>): string {
+  const entries = journal
+    .map((j) => `[${j.date}] مزاج: ${SELF_MOOD_AR[j.mood]} (${j.mood}/5) • طاقة: ${SELF_ENERGY_AR[j.energy]} (${j.energy}/5)${j.tags.length ? ` • ${j.tags.map((t) => '#' + t).join(' ')}` : ''}${j.text ? `: ${j.text}` : ''}`)
+    .join('\n');
+  const goals = (Array.isArray(d.goals) ? d.goals : [])
+    .slice(0, 15)
+    .map((g: any) => `- (${SELF_GOAL_AR[g?.status] || 'شغّال'}) ${String(g?.text || '').slice(0, 200)}${g?.targetDate ? ` • الموعد: ${String(g.targetDate).slice(0, 10)}` : ''}`)
+    .filter((l: string) => l.length > 12)
+    .join('\n');
+
+  return `${profileBlock(d)}
+يومياته (من الأقدم للأحدث):
+${entries}
+
+أهدافه:
+${goals || '(مفيش أهداف مسجلة)'}
+
+المطلوب (حوالي 150 كلمة)، وابدأ كل سطر بالعنوان ده بالظبط من غير رموز:
+اللي لاحظته: ... (نمط في المزاج أو الطاقة عبر الأيام)
+بيشحنك وبيتعبك: ... (اربطه بالوسوم والأيام المسجلة، ولو مفيش وسوم كفاية قول كده)
+أهدافك: ... (جملة أو اتنين، ولو مفيش أهداف قول كده)
+خطوة صغيرة النهارده: ... (حاجة واحدة قابلة للتنفيذ)`;
+}
+
 function parseJsonLoose(text: string): any {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try {
@@ -655,9 +715,21 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'مفيش معلومات مسجلة في الملف لسه. سجّل مواقف وملاحظات الأول.' });
     }
     prompt = buildAskPrompt(dossier, q, mem);
+  } else if (action === 'selfreview') {
+    if (!dossier?.isSelf) {
+      return res.status(400).json({ error: 'التحليل ده لملفك الشخصي بس' });
+    }
+    const journal = cleanJournal(dossier.journal);
+    if (journal.length < 3) {
+      return res.status(400).json({ error: 'سجّل 3 أيام على الأقل في يومياتك الأول' });
+    }
+    prompt = buildSelfReviewPrompt(dossier, journal);
   } else {
     return res.status(404).json({ error: 'Unknown action' });
   }
+
+  // The user's own file: every prompt must talk to the user directly, not about "another person".
+  if (dossier?.isSelf) prompt = SELF_NOTE + prompt;
 
   const ai = new GoogleGenAI({ apiKey });
   let lastError: any = null;
@@ -691,7 +763,7 @@ export default async function handler(req: any, res: any) {
       const response = await ai.models.generateContent({
         model,
         contents: prompt,
-        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : action === 'ask' ? ASK_SYSTEM : SYSTEM_PROMPT },
+        config: { systemInstruction: action === 'simulate' ? SIM_SYSTEM : action === 'ask' ? ASK_SYSTEM : action === 'selfreview' ? SELF_SYSTEM : SYSTEM_PROMPT },
       });
       if (response.text) return res.status(200).json({ result: response.text, model });
       lastError = new Error('رد فارغ من النموذج');
