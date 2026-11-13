@@ -422,3 +422,115 @@ test('applyImport with an empty selection changes nothing', () => {
   assert.deepEqual(patch, {});
   assert.equal(counts.profileFields + counts.mindFields, 0);
 });
+
+import {
+  createSelfDossier,
+  dailySeries,
+  energyByPerson,
+  findSelf,
+  goalProgress,
+  journalStats,
+  makeJournalEntry,
+  normalizeTags,
+  pinSelfFirst,
+  tagImpacts,
+  whatOthersKnow,
+} from './selfLogic';
+
+const SELF_NOW = new Date('2026-11-14T12:00:00');
+const jr = (date: string, mood: number, energy: number, tags: string[] = []) =>
+  makeJournalEntry({ date, mood, energy, text: 'x', tags }, new Date(`${date}T10:00:00`).getTime());
+
+test('createSelfDossier makes a valid pinned self file', () => {
+  const s = createSelfDossier(SELF_NOW);
+  assert.equal(s.isSelf, true);
+  assert.deepEqual(s.journal, []);
+  assert.deepEqual(s.goals, []);
+  const list = pinSelfFirst([{ id: 'a' }, { id: 'b', isSelf: true }, { id: 'c' }] as any);
+  assert.equal((list[0] as any).id, 'b');
+  assert.deepEqual(list.slice(1).map((d: any) => d.id), ['a', 'c']);
+  assert.equal(findSelf([{ id: 'a' }, s] as any)?.id, s.id);
+});
+
+test('normalizeTags splits Arabic and English commas, trims and dedupes', () => {
+  assert.deepEqual(normalizeTags('شغل، عيلة, #شغل ,  '), ['شغل', 'عيلة']);
+});
+
+test('makeJournalEntry clamps mood and energy to 1..5', () => {
+  const e = makeJournalEntry({ mood: 9, energy: -2, text: '  hi ' });
+  assert.equal(e.mood, 5);
+  assert.equal(e.energy, 1);
+  assert.equal(e.text, 'hi');
+});
+
+test('journalStats: streak counts back from today, or from yesterday if today is empty', () => {
+  const withToday = [jr('2026-11-14', 4, 4), jr('2026-11-13', 4, 4), jr('2026-11-12', 3, 3), jr('2026-11-10', 3, 3)];
+  assert.equal(journalStats(withToday, SELF_NOW).streak, 3);
+  const noToday = [jr('2026-11-13', 4, 4), jr('2026-11-12', 3, 3)];
+  assert.equal(journalStats(noToday, SELF_NOW).streak, 2);
+  const stale = [jr('2026-11-01', 4, 4)];
+  assert.equal(journalStats(stale, SELF_NOW).streak, 0);
+});
+
+test('journalStats: mood trend compares last 7 days with the 7 before', () => {
+  const j = [
+    jr('2026-11-14', 5, 4), jr('2026-11-13', 5, 4), jr('2026-11-12', 4, 4),
+    jr('2026-11-05', 2, 2), jr('2026-11-04', 2, 2), jr('2026-11-03', 3, 2),
+  ];
+  const s = journalStats(j, SELF_NOW);
+  assert.equal(s.moodTrend, 'improving');
+  assert.equal(journalStats([jr('2026-11-14', 5, 4)], SELF_NOW).moodTrend, null);
+});
+
+test('dailySeries returns one point per day and averages same-day entries', () => {
+  const s = dailySeries([jr('2026-11-14', 2, 2), jr('2026-11-14', 4, 4)], 7, SELF_NOW);
+  assert.equal(s.length, 7);
+  assert.equal(s[6].date, '2026-11-14');
+  assert.equal(s[6].mood, 3);
+  assert.equal(s[0].mood, null);
+});
+
+test('tagImpacts needs enough data and finds charging / draining tags', () => {
+  assert.deepEqual(tagImpacts([jr('2026-11-14', 5, 5, ['كورة'])]), { charging: [], draining: [] });
+  const j = [
+    jr('2026-11-14', 5, 5, ['كورة']), jr('2026-11-13', 5, 4, ['كورة']),
+    jr('2026-11-12', 1, 1, ['شغل']), jr('2026-11-11', 2, 1, ['شغل']),
+    jr('2026-11-10', 3, 3), jr('2026-11-09', 3, 3),
+  ];
+  const r = tagImpacts(j);
+  assert.equal(r.charging[0].tag, 'كورة');
+  assert.equal(r.draining[0].tag, 'شغل');
+  // a tag seen once is ignored
+  assert.equal(tagImpacts([...j, jr('2026-11-08', 1, 1, ['مرة'])]).draining.some((t) => t.tag === 'مرة'), false);
+});
+
+test('goalProgress ignores paused goals in the percentage', () => {
+  const g: any = [{ status: 'done' }, { status: 'active' }, { status: 'paused' }, { status: 'paused' }];
+  assert.deepEqual(goalProgress(g), { active: 1, done: 1, paused: 2, percentDone: 50 });
+  assert.equal(goalProgress([]).percentDone, null);
+});
+
+test('whatOthersKnow groups per person and counts statuses, skipping the self file', () => {
+  const others: any = [
+    { id: 'a', name: 'أحمد', knowledge: [{ text: 'شغلي', status: 'knows' }, { text: 'مشكلتي', status: 'unknown' }] },
+    { id: 'b', name: 'بسمة', knowledge: [] },
+    { id: 's', name: 'أنا', isSelf: true, knowledge: [{ text: 'x', status: 'knows' }] },
+  ];
+  const r = whatOthersKnow(others);
+  assert.equal(r.people.length, 1);
+  assert.deepEqual(r.counts, { knows: 1, unsure: 0, unknown: 1 });
+});
+
+test('energyByPerson separates charging and draining people and counts unrated ones', () => {
+  const entry = (date: string, energy: string) => ({ id: date + energy, date, text: 't', type: 'incident', source: 'seen', energy });
+  const rated = (energy: string) => [entry('2026-11-10', energy), entry('2026-11-11', energy), entry('2026-11-12', energy), entry('2026-11-13', energy)];
+  const others: any = [
+    { id: 'a', name: 'مريح', timeline: rated('positive') },
+    { id: 'b', name: 'مرهق', timeline: rated('draining') },
+    { id: 'c', name: 'جديد', timeline: [] },
+  ];
+  const r = energyByPerson(others, SELF_NOW);
+  assert.deepEqual(r.charging.map((p) => p.name), ['مريح']);
+  assert.deepEqual(r.draining.map((p) => p.name), ['مرهق']);
+  assert.equal(r.unrated, 1);
+});
