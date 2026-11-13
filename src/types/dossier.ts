@@ -117,6 +117,27 @@ export interface PredictionEntry {
   learnedNoteId?: string; // id of the auto-added timeline entry
 }
 
+/** One daily check-in in the user's own file ("my diary"). */
+export interface JournalEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  mood: number; // 1 (bad) .. 5 (great)
+  energy: number; // 1 (empty) .. 5 (full)
+  text: string;
+  tags?: string[]; // what the day was about: work, family, a person's name...
+}
+
+export type GoalStatus = 'active' | 'done' | 'paused';
+
+export interface GoalItem {
+  id: string;
+  text: string;
+  status: GoalStatus;
+  createdAt: string;
+  targetDate?: string;
+  note?: string;
+}
+
 export interface PersonDossier {
   id: string;
   name: string;
@@ -142,6 +163,10 @@ export interface PersonDossier {
   life?: LifeFact[];
   knowledge?: KnowledgeItem[];
   circle?: CircleMember[];
+  /** true for the user's own file: pinned first, with the extra diary / goals / "how others see me" pages. */
+  isSelf?: boolean;
+  journal?: JournalEntry[];
+  goals?: GoalItem[];
   changesOverTime: ChangesReport;
   predictions: PredictionEntry[];
 }
